@@ -6,7 +6,8 @@
       "Bash(source:*)",
       "Bash(source ~/.zshrc)",
       "Bash(echo:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(pnpm biome check:*)"
     ]
   }
 }

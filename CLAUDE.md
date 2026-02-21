@@ -9,11 +9,12 @@ Recreate a Pac-Man-style game playable in the browser. Classic gameplay: player 
 ## Tech Stack
 
 | Concern       | Choice       |
-|---------------|--------------|
+| ------------- | ------------ |
 | Language      | TypeScript   |
 | Bundler       | Vite         |
 | Renderer      | HTML5 Canvas |
 | Testing       | Vitest       |
+| Linter        | Biome        |
 | Package mgr   | pnpm         |
 
 ## Commands
@@ -25,6 +26,9 @@ pnpm build            # Type-check (tsc) then production build (outputs to dist/
 pnpm preview          # Preview the production build locally
 pnpm test             # Run Vitest in watch mode
 pnpm test:run         # Run tests once (no watch)
+pnpm lint             # Lint src/ and tests/ with Biome
+pnpm format           # Auto-format src/ and tests/ with Biome
+pnpm check            # Lint + format check (no writes) — use in CI
 ```
 
 ## Project Structure
@@ -37,15 +41,19 @@ src/
   entities/
     player.ts               # PlayerState type + createPlayer + updatePlayer (pure)
   maze/
-    dots.ts                 # Dot type + createDots + eatDots (pure)
+    tiles.ts                # TILE constant, TileType, parseTile
+    mazeLayouts.ts          # MazeLayout interface + LEVEL_1 classic maze
+    maze.ts                 # MazeState + createMaze + isWallAt + createDotsFromMaze
+    dots.ts                 # Dot type + eatDots (pure)
   rendering/
-    renderer.ts             # clearCanvas + drawDots + drawPlayer
+    renderer.ts             # clearCanvas + drawMaze + drawDots + drawPlayer
   state/                    # (planned) Score, lives, level state
 tests/
-  game.test.ts              # Placeholder
-  player.test.ts            # Unit tests for player movement logic
-  dots.test.ts              # Unit tests for dot creation and eating
+  player.test.ts            # Unit tests for player movement and wall collision
+  dots.test.ts              # Unit tests for dot eating
+  maze.test.ts              # Unit tests for maze parsing and tile queries
 index.html                  # Shell HTML with <canvas>
+biome.json                  # Biome linter/formatter config
 vite.config.ts
 tsconfig.json
 ```
@@ -62,6 +70,7 @@ tsconfig.json
 
 - Strict TypeScript (`strict: true` in tsconfig)
 - Prefer pure functions for game logic (easier to test)
+- Prefer types over interfaces
 - Game state is explicit and passed around, not hidden in globals
 - Tests live in `tests/` and cover logic (maze, AI, scoring) — not rendering
 
@@ -70,13 +79,13 @@ tsconfig.json
 Features are tracked as GitHub Issues. This section exists so Claude understands
 the intended direction and can make architecture decisions that won't need undoing.
 
-| # | Feature | Notes |
-|---|---------|-------|
-| 1 | **Maze** | Tile-based walls replacing the open canvas; define layout as a 2-D array of tile types (wall, floor, dot, power pellet) |
-| 2 | **Power pellets** | Larger dots at maze corners; trigger a timed ghost-vulnerable state |
-| 3 | **Ghosts** | 4 enemies (Blinky, Pinky, Inky, Clyde) with classic scatter/chase/frightened AI state machines; lives in `entities/ghost.ts` |
-| 4 | **Scoring** | Points for dots (10), power pellets (50), ghosts while vulnerable (200/400/800/1600); HUD overlay on canvas |
-| 5 | **Lives system** | Start with 3 lives; respawn on ghost collision; game-over screen |
-| 6 | **Level progression** | Clear all dots → next level; increase ghost speed and reduce frightened duration per level |
-| 7 | **Sound** | Web Audio API for chomp, ghost eaten, death, and level-complete sounds |
-| 8 | **High score** | Persist best score to `localStorage` |
+| #   | Feature               | Notes                                                                                                                        |
+| --- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Maze**              | Tile-based walls replacing the open canvas; define layout as a 2-D array of tile types (wall, floor, dot, power pellet)      |
+| 2   | **Power pellets**     | Larger dots at maze corners; trigger a timed ghost-vulnerable state                                                          |
+| 3   | **Ghosts**            | 4 enemies (Blinky, Pinky, Inky, Clyde) with classic scatter/chase/frightened AI state machines; lives in `entities/ghost.ts` |
+| 4   | **Scoring**           | Points for dots (10), power pellets (50), ghosts while vulnerable (200/400/800/1600); HUD overlay on canvas                  |
+| 5   | **Lives system**      | Start with 3 lives; respawn on ghost collision; game-over screen                                                             |
+| 6   | **Level progression** | Clear all dots → next level; increase ghost speed and reduce frightened duration per level                                   |
+| 7   | **Sound**             | Web Audio API for chomp, ghost eaten, death, and level-complete sounds                                                       |
+| 8   | **High score**        | Persist best score to `localStorage`                                                                                         |

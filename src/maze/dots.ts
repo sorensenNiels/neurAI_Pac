@@ -1,38 +1,13 @@
-export const TILE = 20;      // grid cell size in pixels
+import { TILE } from "./tiles";
+
+export { TILE }; // re-export so existing importers of TILE from dots.ts still work
+
 export const DOT_RADIUS = 3; // pixels
 
 export interface Dot {
   x: number;
   y: number;
-}
-
-/**
- * Pure function — builds the initial grid of food dots.
- * Dots are placed at every tile intersection across the canvas, skipping any
- * that fall within a clear zone around pac-man's spawn point.
- */
-export function createDots(
-  width: number,
-  height: number,
-  spawnX: number,
-  spawnY: number,
-): Dot[] {
-  const dots: Dot[] = [];
-  const skipRadius = TILE * 3;
-
-  for (let col = 1; col * TILE < width; col++) {
-    for (let row = 1; row * TILE < height; row++) {
-      const x = col * TILE;
-      const y = row * TILE;
-      const dx = x - spawnX;
-      const dy = y - spawnY;
-      if (dx * dx + dy * dy > skipRadius * skipRadius) {
-        dots.push({ x, y });
-      }
-    }
-  }
-
-  return dots;
+  isPellet: boolean; // true for power pellets, false for regular dots
 }
 
 /**

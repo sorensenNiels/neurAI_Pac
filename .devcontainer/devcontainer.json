@@ -25,12 +25,12 @@
       "extensions": [
         "vitest.explorer",
         "ms-vscode.vscode-typescript-next",
-        "esbenp.prettier-vscode",
-        "Anthropic.claude-code"
+        "Anthropic.claude-code",
+        "biomejs.biome"
       ],
       "settings": {
         "editor.formatOnSave": true,
-        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.defaultFormatter": "biomejs.biome",
         "typescript.tsdk": "node_modules/typescript/lib"
       }
     }
