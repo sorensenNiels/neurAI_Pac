@@ -27,20 +27,25 @@ pnpm test             # Run Vitest in watch mode
 pnpm test:run         # Run tests once (no watch)
 ```
 
-## Project Structure (intended — only `src/main.ts`, `src/game.ts`, and `tests/game.test.ts` exist so far)
+## Project Structure
 
 ```
 src/
-  main.ts           # Entry point, bootstraps game
-  game.ts           # Main game loop (requestAnimationFrame)
-  input.ts          # Keyboard input handling
-  maze/             # Maze layout and tile types
-  entities/         # Player, Ghost base classes
-  rendering/        # Canvas drawing utilities
-  state/            # Game state (score, lives, level)
+  main.ts                   # Entry point, bootstraps Game
+  game.ts                   # Thin orchestrator: RAF loop + wires update/render
+  input.ts                  # Keyboard input — tracks held arrow key direction
+  entities/
+    player.ts               # PlayerState type + createPlayer + updatePlayer (pure)
+  maze/
+    dots.ts                 # Dot type + createDots + eatDots (pure)
+  rendering/
+    renderer.ts             # clearCanvas + drawDots + drawPlayer
+  state/                    # (planned) Score, lives, level state
 tests/
-  *.test.ts         # Vitest unit tests
-index.html          # Shell HTML with <canvas>
+  game.test.ts              # Placeholder
+  player.test.ts            # Unit tests for player movement logic
+  dots.test.ts              # Unit tests for dot creation and eating
+index.html                  # Shell HTML with <canvas>
 vite.config.ts
 tsconfig.json
 ```
@@ -59,3 +64,19 @@ tsconfig.json
 - Prefer pure functions for game logic (easier to test)
 - Game state is explicit and passed around, not hidden in globals
 - Tests live in `tests/` and cover logic (maze, AI, scoring) — not rendering
+
+## Roadmap (planned, not yet built)
+
+Features are tracked as GitHub Issues. This section exists so Claude understands
+the intended direction and can make architecture decisions that won't need undoing.
+
+| # | Feature | Notes |
+|---|---------|-------|
+| 1 | **Maze** | Tile-based walls replacing the open canvas; define layout as a 2-D array of tile types (wall, floor, dot, power pellet) |
+| 2 | **Power pellets** | Larger dots at maze corners; trigger a timed ghost-vulnerable state |
+| 3 | **Ghosts** | 4 enemies (Blinky, Pinky, Inky, Clyde) with classic scatter/chase/frightened AI state machines; lives in `entities/ghost.ts` |
+| 4 | **Scoring** | Points for dots (10), power pellets (50), ghosts while vulnerable (200/400/800/1600); HUD overlay on canvas |
+| 5 | **Lives system** | Start with 3 lives; respawn on ghost collision; game-over screen |
+| 6 | **Level progression** | Clear all dots → next level; increase ghost speed and reduce frightened duration per level |
+| 7 | **Sound** | Web Audio API for chomp, ghost eaten, death, and level-complete sounds |
+| 8 | **High score** | Persist best score to `localStorage` |
