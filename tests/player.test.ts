@@ -103,6 +103,22 @@ describe("updatePlayer — wall collision", () => {
     const next = updatePlayer(p, "right", 0.1, BOUNDS, noWalls);
     expect(next.x).toBeGreaterThan(p.x);
   });
+
+  it("stops rightward movement when only the upper-diagonal probe hits a wall", () => {
+    // Simulates a wall tile above-right that the single centre-point check
+    // would have missed. The diagonal probe at (nx+7, y-7) must catch it.
+    const p = createPlayer(280, 310);
+    const upperWallOnly = (_x: number, y: number) => y < p.y; // wall above centre
+    const next = updatePlayer(p, "right", 0.016, BOUNDS, upperWallOnly);
+    expect(next.x).toBe(p.x);
+  });
+
+  it("stops downward movement when only the right-diagonal probe hits a wall", () => {
+    const p = createPlayer(280, 310);
+    const rightWallOnly = (x: number, _y: number) => x > p.x; // wall right of centre
+    const next = updatePlayer(p, "down", 0.016, BOUNDS, rightWallOnly);
+    expect(next.y).toBe(p.y);
+  });
 });
 
 describe("updatePlayer — facing and animation state", () => {

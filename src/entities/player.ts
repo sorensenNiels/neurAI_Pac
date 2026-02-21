@@ -52,27 +52,54 @@ export function updatePlayer(
   let x = player.x;
   let y = player.y;
 
-  // Compute candidate new position then check the leading edge for wall collision.
+  // Diagonal offset: radius projected at 45° (cos 45° × R ≈ 0.707 × 10 ≈ 7).
+  // Used to probe the upper- and lower-corner of the leading arc so the full
+  // circular body is checked, not just the single centre-height point.
+  const R = PACMAN_RADIUS;
+  const D = Math.round(R / Math.SQRT2); // ≈ 7
+
+  // Compute candidate new position then check three points on the leading arc.
+  // All three must be clear before the move is accepted.
   // Each axis is handled independently so Pac-Man can slide along a wall.
   switch (dir) {
     case "right": {
       const nx = x + dist;
-      if (!isWallAt(nx + PACMAN_RADIUS, y)) x = nx;
+      if (
+        !isWallAt(nx + R, y) &&
+        !isWallAt(nx + D, y - D) &&
+        !isWallAt(nx + D, y + D)
+      )
+        x = nx;
       break;
     }
     case "left": {
       const nx = x - dist;
-      if (!isWallAt(nx - PACMAN_RADIUS, y)) x = nx;
+      if (
+        !isWallAt(nx - R, y) &&
+        !isWallAt(nx - D, y - D) &&
+        !isWallAt(nx - D, y + D)
+      )
+        x = nx;
       break;
     }
     case "down": {
       const ny = y + dist;
-      if (!isWallAt(x, ny + PACMAN_RADIUS)) y = ny;
+      if (
+        !isWallAt(x, ny + R) &&
+        !isWallAt(x - D, ny + D) &&
+        !isWallAt(x + D, ny + D)
+      )
+        y = ny;
       break;
     }
     case "up": {
       const ny = y - dist;
-      if (!isWallAt(x, ny - PACMAN_RADIUS)) y = ny;
+      if (
+        !isWallAt(x, ny - R) &&
+        !isWallAt(x - D, ny - D) &&
+        !isWallAt(x + D, ny - D)
+      )
+        y = ny;
       break;
     }
   }

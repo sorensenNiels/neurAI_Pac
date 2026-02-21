@@ -79,13 +79,14 @@ tsconfig.json
 Features are tracked as GitHub Issues. This section exists so Claude understands
 the intended direction and can make architecture decisions that won't need undoing.
 
-| #   | Feature               | Notes                                                                                                                        |
-| --- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Maze**              | Tile-based walls replacing the open canvas; define layout as a 2-D array of tile types (wall, floor, dot, power pellet)      |
-| 2   | **Power pellets**     | Larger dots at maze corners; trigger a timed ghost-vulnerable state                                                          |
-| 3   | **Ghosts**            | 4 enemies (Blinky, Pinky, Inky, Clyde) with classic scatter/chase/frightened AI state machines; lives in `entities/ghost.ts` |
-| 4   | **Scoring**           | Points for dots (10), power pellets (50), ghosts while vulnerable (200/400/800/1600); HUD overlay on canvas                  |
-| 5   | **Lives system**      | Start with 3 lives; respawn on ghost collision; game-over screen                                                             |
-| 6   | **Level progression** | Clear all dots → next level; increase ghost speed and reduce frightened duration per level                                   |
-| 7   | **Sound**             | Web Audio API for chomp, ghost eaten, death, and level-complete sounds                                                       |
-| 8   | **High score**        | Persist best score to `localStorage`                                                                                         |
+| #   | Feature                    | Notes                                                                                                                                                                   |
+| --- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Maze**                   | Tile-based walls replacing the open canvas; define layout as a 2-D array of tile types (wall, floor, dot, power pellet)                                                 |
+| 2   | **Power pellets**          | Larger dots at maze corners; trigger a timed ghost-vulnerable state                                                                                                     |
+| 3   | **Super power pellets**    | Rare special pellets that grant Pac-Man a temporary super power; each pickup randomly awards one of: speed boost, ghost freeze, score multiplier, or pass-through walls |
+| 4   | **Ghosts**                 | 4 enemies (Blinky, Pinky, Inky, Clyde) with classic scatter/chase/frightened AI state machines; lives in `entities/ghost.ts`                                           |
+| 5   | **Scoring**                | Points for dots (10), power pellets (50), ghosts while vulnerable (200/400/800/1600); HUD overlay on canvas                                                             |
+| 6   | **Lives system**           | Start with 3 lives; respawn on ghost collision; game-over screen                                                                                                        |
+| 7   | **Level progression**      | Clear all dots → next level; increase ghost speed and reduce frightened duration per level                                                                               |
+| 8   | **Sound**                  | Web Audio API for chomp, ghost eaten, death, and level-complete sounds                                                                                                  |
+| 9   | **High score**             | Persist best score to `localStorage`                                                                                                                                    |
