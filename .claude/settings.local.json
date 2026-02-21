@@ -5,7 +5,8 @@
       "Bash(node --version:*)",
       "Bash(source:*)",
       "Bash(source ~/.zshrc)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

@@ -21,12 +21,13 @@ Recreate a Pac-Man-style game playable in the browser. Classic gameplay: player 
 ```bash
 pnpm install          # Install dependencies
 pnpm dev              # Start Vite dev server
-pnpm build            # Production build (outputs to dist/)
-pnpm test             # Run Vitest
-pnpm test --run       # Run tests once (no watch)
+pnpm build            # Type-check (tsc) then production build (outputs to dist/)
+pnpm preview          # Preview the production build locally
+pnpm test             # Run Vitest in watch mode
+pnpm test:run         # Run tests once (no watch)
 ```
 
-## Project Structure (intended)
+## Project Structure (intended — only `src/main.ts`, `src/game.ts`, and `tests/game.test.ts` exist so far)
 
 ```
 src/
@@ -48,7 +49,7 @@ tsconfig.json
 
 - **Game loop**: `requestAnimationFrame`-driven, fixed timestep update + variable render
 - **Canvas**: single `<canvas>` element, cleared and redrawn each frame
-- **Coordinate system**: tile-based grid (e.g. 28×31 tiles), converted to pixels at render time
+- **Coordinate system**: tile-based grid (28×31 tiles), each tile is 20px → canvas is 560×620px
 - **Entities**: Player and Ghost share movement logic; ghosts have independent AI state machines
 - **No external game engine** — keep dependencies minimal
 

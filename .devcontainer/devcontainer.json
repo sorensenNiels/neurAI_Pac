@@ -25,7 +25,8 @@
       "extensions": [
         "vitest.explorer",
         "ms-vscode.vscode-typescript-next",
-        "esbenp.prettier-vscode"
+        "esbenp.prettier-vscode",
+        "Anthropic.claude-code"
       ],
       "settings": {
         "editor.formatOnSave": true,

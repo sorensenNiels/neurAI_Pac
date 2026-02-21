@@ -1,6 +1,10 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  server: {
+    host: true, // bind to 0.0.0.0 so devcontainer port-forwarding works
+    port: 5173,
+  },
   test: {
     environment: "jsdom",
     include: ["tests/**/*.test.ts"],
