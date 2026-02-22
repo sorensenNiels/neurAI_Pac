@@ -57,7 +57,7 @@ function tryTurn(
     }
   }
 
-  return { allowed: canMoveInDir(snapX, snapY, desiredDir, isWallAt), snapX, snapY };
+  return { allowed: canMoveInDir(snapX, snapY, desiredDir, 1, isWallAt), snapX, snapY };
 }
 
 export interface PlayerState {
@@ -86,32 +86,43 @@ export function createPlayer(startX: number, startY: number): PlayerState {
 }
 
 /**
- * Returns true when Pac-Man can take one step in `dir` from (x, y).
- * Checks three points on the leading arc so the full circular body is tested.
+ * Returns true when Pac-Man can take a step of `dist` pixels in `dir` from
+ * (x, y) without any point on the leading arc entering a wall.
+ *
+ * Probes are evaluated at the *destination* (x ± dist, y ± dist) rather than
+ * the current position.  This is critical for "left" and "up": Math.floor maps
+ * the tile-boundary pixel (e.g. x − R at a tile centre) back to the current
+ * tile, so checking the current position would never detect walls ahead in
+ * those directions.  Probing the destination position is symmetric with "right"
+ * and "down" and matches the original single-pass movement logic.
+ *
+ * Pass dist = 1 for turn-validity checks (just enough to cross the boundary).
+ * Pass dist = SPEED * dt for actual movement checks.
  */
 function canMoveInDir(
   x: number,
   y: number,
   dir: Direction,
+  dist: number,
   isWallAt: (x: number, y: number) => boolean,
 ): boolean {
   switch (dir) {
-    case "right":
-      return (
-        !isWallAt(x + R, y) && !isWallAt(x + D, y - D) && !isWallAt(x + D, y + D)
-      );
-    case "left":
-      return (
-        !isWallAt(x - R, y) && !isWallAt(x - D, y - D) && !isWallAt(x - D, y + D)
-      );
-    case "down":
-      return (
-        !isWallAt(x, y + R) && !isWallAt(x - D, y + D) && !isWallAt(x + D, y + D)
-      );
-    case "up":
-      return (
-        !isWallAt(x, y - R) && !isWallAt(x - D, y - D) && !isWallAt(x + D, y - D)
-      );
+    case "right": {
+      const nx = x + dist;
+      return !isWallAt(nx + R, y) && !isWallAt(nx + D, y - D) && !isWallAt(nx + D, y + D);
+    }
+    case "left": {
+      const nx = x - dist;
+      return !isWallAt(nx - R, y) && !isWallAt(nx - D, y - D) && !isWallAt(nx - D, y + D);
+    }
+    case "down": {
+      const ny = y + dist;
+      return !isWallAt(x, ny + R) && !isWallAt(x - D, ny + D) && !isWallAt(x + D, ny + D);
+    }
+    case "up": {
+      const ny = y - dist;
+      return !isWallAt(x, ny - R) && !isWallAt(x - D, ny - D) && !isWallAt(x + D, ny - D);
+    }
   }
 }
 
@@ -130,14 +141,16 @@ function canMoveInDir(
  * @param player   Current state
  * @param dir      Direction from input (held key), or null
  * @param dt       Frame delta-time in seconds
- * @param bounds   Canvas dimensions used for edge clamping
+ * @param bounds   Canvas dimensions used for edge clamping.
+ *                 `xMin`/`xMax` override the default clamp of [R, width-R] —
+ *                 used by the tunnel row to let Pac-Man cross the canvas edge.
  * @param isWallAt Predicate; return true if a pixel coordinate is inside a wall.
  */
 export function updatePlayer(
   player: PlayerState,
   dir: Direction | null,
   dt: number,
-  bounds: { width: number; height: number },
+  bounds: { width: number; height: number; xMin?: number; xMax?: number },
   isWallAt: (x: number, y: number) => boolean = () => false,
 ): PlayerState {
   // New input overrides the queued direction; releasing a key preserves it.
@@ -163,7 +176,7 @@ export function updatePlayer(
     }
   }
 
-  if (currentDir !== null && canMoveInDir(x, y, currentDir, isWallAt)) {
+  if (currentDir !== null && canMoveInDir(x, y, currentDir, dist, isWallAt)) {
     switch (currentDir) {
       case "right":
         x += dist;
@@ -181,7 +194,10 @@ export function updatePlayer(
   }
 
   // Clamp to canvas bounds (tunnel wrapping is handled separately in game.ts).
-  x = Math.max(R, Math.min(bounds.width - R, x));
+  // xMin/xMax can be overridden by the caller for the tunnel row.
+  const xMin = bounds.xMin ?? R;
+  const xMax = bounds.xMax ?? bounds.width - R;
+  x = Math.max(xMin, Math.min(xMax, x));
   y = Math.max(R, Math.min(bounds.height - R, y));
 
   const isMoving = x !== player.x || y !== player.y;

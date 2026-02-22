@@ -12,7 +12,28 @@ import {
   drawDots,
   drawMaze,
   drawPlayer,
+  drawScore,
+  HUD_HEIGHT,
 } from "./rendering/renderer";
+
+/**
+ * Pure function — teleports Pac-Man when its centre has fully crossed a tunnel
+ * exit, placing it at the matching entrance on the opposite side.
+ *
+ * Called after updatePlayer each frame so the wrap happens in the same tick as
+ * the exit.  Returns the player unchanged on any non-tunnel row.
+ */
+export function wrapTunnels(
+  player: PlayerState,
+  tunnelRow: number,
+  canvasWidth: number,
+): PlayerState {
+  const row = Math.floor(player.y / TILE);
+  if (row !== tunnelRow) return player;
+  if (player.x < 0) return { ...player, x: canvasWidth - PACMAN_RADIUS };
+  if (player.x >= canvasWidth) return { ...player, x: PACMAN_RADIUS };
+  return player;
+}
 
 /**
  * Game — the top-level orchestrator.
@@ -20,7 +41,7 @@ import {
  * Owns only:
  *   1. The RAF game loop (start / stop / loop)
  *   2. References to the canvas, Input handler, and current maze
- *   3. The current game state (player + dots)
+ *   3. The current game state (player, dots, score)
  *
  * All logic lives in pure functions in entities/ and maze/.
  * All drawing lives in rendering/renderer.ts.
@@ -33,6 +54,7 @@ export class Game {
   private maze: MazeState;
   private player: PlayerState;
   private dots: Dot[];
+  private score = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
@@ -40,7 +62,7 @@ export class Game {
     this.ctx = ctx;
 
     canvas.width = 560; // 28 tiles × 20px
-    canvas.height = 620; // 31 tiles × 20px
+    canvas.height = 620 + HUD_HEIGHT; // 31 maze rows + 1 HUD row
 
     this.input = new Input();
     this.maze = createMaze(LEVEL_1);
@@ -73,8 +95,28 @@ export class Game {
   }
 
   private update(dt: number): void {
-    const bounds = { width: this.canvas.width, height: this.canvas.height };
-    const wallFn = (x: number, y: number) => isWallAt(this.maze, x, y);
+    const width = this.canvas.width;
+    // Player physics live in maze coordinates (620px tall), not the full
+    // canvas height (which includes the HUD strip).
+    const mazeHeight = this.maze.rows * TILE;
+    const { tunnelRow } = this.maze;
+
+    // On the tunnel row the left and right canvas edges are open passages.
+    // We intercept out-of-canvas probes on that row so canMoveInDir doesn't
+    // treat them as walls, allowing Pac-Man to physically cross the edge.
+    const wallFn = (px: number, py: number): boolean => {
+      const row = Math.floor(py / TILE);
+      if (row === tunnelRow && (px < 0 || px >= width)) return false;
+      return isWallAt(this.maze, px, py);
+    };
+
+    // On the tunnel row extend x-bounds beyond the canvas so updatePlayer's
+    // clamp doesn't snap Pac-Man back before wrapTunnels can fire.
+    const playerRow = Math.floor(this.player.y / TILE);
+    const bounds =
+      playerRow === tunnelRow
+        ? { width, height: mazeHeight, xMin: -TILE, xMax: width + TILE }
+        : { width, height: mazeHeight };
 
     this.player = updatePlayer(
       this.player,
@@ -84,23 +126,25 @@ export class Game {
       wallFn,
     );
 
-    // Tunnel wrapping — at the tunnel row, the canvas edges are open passages
-    // rather than hard boundaries, so we override the normal clamping.
-    const playerRow = Math.floor(this.player.y / TILE);
-    if (playerRow === this.maze.tunnelRow) {
-      if (this.player.x < 0)
-        this.player = { ...this.player, x: this.canvas.width - PACMAN_RADIUS };
-      if (this.player.x > this.canvas.width)
-        this.player = { ...this.player, x: PACMAN_RADIUS };
-    }
+    this.player = wrapTunnels(this.player, tunnelRow, width);
 
+    const prevCount = this.dots.length;
     this.dots = eatDots(this.dots, this.player.x, this.player.y, PACMAN_RADIUS);
+    this.score += prevCount - this.dots.length;
   }
 
   private render(): void {
     clearCanvas(this.ctx, this.canvas.width, this.canvas.height);
+
+    // HUD — drawn in canvas space before any transform
+    drawScore(this.ctx, this.score, this.canvas.width);
+
+    // Maze, dots and player live in maze coordinates; shift down past the HUD.
+    this.ctx.save();
+    this.ctx.translate(0, HUD_HEIGHT);
     drawMaze(this.ctx, this.maze);
     drawDots(this.ctx, this.dots);
     drawPlayer(this.ctx, this.player);
+    this.ctx.restore();
   }
 }

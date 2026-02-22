@@ -11,6 +11,9 @@ import { DOT_RADIUS } from "../maze/dots";
 import type { MazeState } from "../maze/maze";
 import { TILE } from "../maze/tiles";
 
+/** Height of the HUD strip drawn above the maze, in pixels. */
+export const HUD_HEIGHT = TILE; // 20 px — one tile row
+
 // Center angle of the mouth opening for each facing direction.
 // Measured in radians, clockwise from 3 o'clock (the canvas x-axis).
 //
@@ -67,6 +70,22 @@ export function drawDots(ctx: CanvasRenderingContext2D, dots: Dot[]): void {
     ctx.arc(dot.x, dot.y, r, 0, 2 * Math.PI);
     ctx.fill();
   }
+}
+
+/**
+ * Draws the score in the HUD strip at the top of the canvas.
+ * Call before any ctx.translate so coordinates are in canvas space.
+ */
+export function drawScore(
+  ctx: CanvasRenderingContext2D,
+  score: number,
+  canvasWidth: number,
+): void {
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 14px monospace";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "middle";
+  ctx.fillText(`${score}`, canvasWidth - 8, HUD_HEIGHT / 2);
 }
 
 /** Draws Pac-Man with an animated chomping mouth. */
