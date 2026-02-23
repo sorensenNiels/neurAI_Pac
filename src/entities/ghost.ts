@@ -183,7 +183,9 @@ function chaseTarget(
  * Rules:
  *  - Never reverse (U-turns banned except on mode change).
  *  - Never enter a wall (door passability depends on mode).
- *  - Frightened: random among valid directions.
+ *  - Frightened: exclude the direction most directly toward Pac-Man, then pick
+ *    randomly from the remainder. This breaks deterministic loops while still
+ *    ensuring the ghost never actively runs at the player.
  *  - Otherwise: direction whose one-step-ahead tile centre is closest to target.
  */
 export function pickDirection(
@@ -208,7 +210,24 @@ export function pickDirection(
   if (valid.length === 0) return reverse;
 
   if (mode === "frightened") {
-    return valid[Math.floor(Math.random() * valid.length)] as Direction;
+    // Find the direction that leads most directly toward Pac-Man (target) and
+    // remove it from the candidate pool, then pick randomly from the rest.
+    // This prevents the ghost from charging at the player while also breaking
+    // the deterministic loops that pure max-distance flee creates.
+    const toward = valid.reduce((worst, d) => {
+      const nx = x + (d === "right" ? TILE : d === "left" ? -TILE : 0);
+      const ny = y + (d === "down" ? TILE : d === "up" ? -TILE : 0);
+      const dist = (nx - targetX) ** 2 + (ny - targetY) ** 2;
+      const bx = x + (worst === "right" ? TILE : worst === "left" ? -TILE : 0);
+      const by = y + (worst === "down" ? TILE : worst === "up" ? -TILE : 0);
+      const worstDist = (bx - targetX) ** 2 + (by - targetY) ** 2;
+      return dist < worstDist ? d : worst;
+    });
+    const pool = valid.filter((d) => d !== toward);
+    const candidates = pool.length > 0 ? pool : valid;
+    return candidates[
+      Math.floor(Math.random() * candidates.length)
+    ] as Direction;
   }
 
   return valid.reduce((best, d) => {
@@ -283,8 +302,8 @@ export function updateGhost(
       break;
     }
     case "frightened":
-      targetX = 0;
-      targetY = 0;
+      targetX = playerX;
+      targetY = playerY;
       break;
     case "eaten":
       targetX = PEN_ENTRANCE_X;

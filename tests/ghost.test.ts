@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   createGhost,
   GHOST_SPEED,
@@ -54,12 +54,17 @@ describe("pickDirection", () => {
     expect(dir).toBe("right");
   });
 
-  it("picks a random direction in frightened mode", () => {
-    // Mock Math.random to always return 0 (first valid candidate)
-    const spy = vi.spyOn(Math, "random").mockReturnValue(0);
-    const dir = pickDirection(x, y, "up", 400, y, "frightened", maze);
-    expect(["up", "down", "left", "right"]).toContain(dir);
-    spy.mockRestore();
+  it("flees from target in frightened mode (never moves directly toward Pac-Man)", () => {
+    // Col 6, row 20 — valid dirs with current "up": up, left, right.
+    // Target at (400, 410) — "right" is the closest direction toward target.
+    // Frightened mode must never pick that direction.
+    const fx = 6 * TILE + TILE / 2; // 130
+    const fy = 20 * TILE + TILE / 2; // 410
+    // Run multiple times to confirm randomness never produces the toward-target dir
+    for (let i = 0; i < 20; i++) {
+      const dir = pickDirection(fx, fy, "up", 400, fy, "frightened", maze);
+      expect(dir).not.toBe("right");
+    }
   });
 
   it("falls back to reverse when completely cornered", () => {

@@ -244,14 +244,21 @@ export class Game {
     this.dots = eatDots(this.dots, this.player.x, this.player.y, PACMAN_RADIUS);
     this.score += prevCount - this.dots.length;
 
-    // Power pellet eaten → frighten all active ghosts (unless already eaten)
+    // Power pellet eaten → frighten ghosts that are out in the maze.
+    // Ghosts in pen/exiting can't pass the door while frightened so they must
+    // be left alone; eaten ghosts are already heading back and are unaffected.
     const pelletsAfter = this.dots.filter((d) => d.isPellet).length;
     if (pelletsAfter < pelletsBefore) {
-      this.ghosts = this.ghosts.map((g) =>
-        g.mode !== "eaten"
-          ? { ...g, mode: "frightened" as const, frightenedTimer: 8 }
-          : g,
-      );
+      this.ghosts = this.ghosts.map((g) => {
+        if (
+          g.mode === "scatter" ||
+          g.mode === "chase" ||
+          g.mode === "frightened"
+        ) {
+          return { ...g, mode: "frightened" as const, frightenedTimer: 8 };
+        }
+        return g;
+      });
     }
 
     // Fruit spawn — trigger at 1/3 and 2/3 dots eaten, max 2 per level
