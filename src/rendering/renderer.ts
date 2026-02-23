@@ -1,3 +1,5 @@
+import type { FruitState } from "../entities/fruit";
+import { FRUIT_EMOJI } from "../entities/fruit";
 import type { GhostState } from "../entities/ghost";
 import {
   GHOST_COLORS,
@@ -128,6 +130,20 @@ export function drawLives(ctx: CanvasRenderingContext2D, lives: number): void {
     ctx.closePath();
     ctx.fill();
   }
+}
+
+/**
+ * Draws the bonus fruit at its maze position using an emoji glyph.
+ * Must be called inside the maze coordinate transform (after ctx.translate).
+ */
+export function drawFruit(
+  ctx: CanvasRenderingContext2D,
+  fruit: FruitState,
+): void {
+  ctx.font = "18px serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(FRUIT_EMOJI[fruit.type], fruit.x, fruit.y);
 }
 
 /** Draws Pac-Man with an animated chomping mouth. */

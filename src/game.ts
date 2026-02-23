@@ -1,3 +1,10 @@
+import type { FruitState } from "./entities/fruit";
+import {
+  FRUIT_DURATION,
+  FRUIT_POINTS,
+  FRUIT_RADIUS,
+  fruitTypeForLevel,
+} from "./entities/fruit";
 import type { GhostState } from "./entities/ghost";
 import {
   createGhost,
@@ -17,6 +24,7 @@ import { TILE } from "./maze/tiles";
 import {
   clearCanvas,
   drawDots,
+  drawFruit,
   drawGameOver,
   drawGhost,
   drawLevel,
@@ -95,6 +103,9 @@ export class Game {
   private score = 0;
   private lives = 3;
   private level = 1;
+  private fruit: FruitState | null = null;
+  private fruitSpawnCount = 0; // how many times fruit has spawned this level (max 2)
+  private initialDotCount = 0; // total dots at the start of each level
   private respawnTimer = 0;
   private gameOver = false;
   private levelComplete = false;
@@ -120,6 +131,7 @@ export class Game {
     this.player = createPlayer(startX, startY);
     this.ghosts = this.createGhosts();
     this.dots = createDotsFromMaze(this.maze);
+    this.initialDotCount = this.dots.length;
   }
 
   /** Creates all three ghosts with staggered pen timers. */
@@ -176,6 +188,9 @@ export class Game {
         this.levelComplete = false;
         this.level++;
         this.dots = createDotsFromMaze(this.maze);
+        this.initialDotCount = this.dots.length;
+        this.fruit = null;
+        this.fruitSpawnCount = 0;
         this.resetPositions();
         this.isChasing = true;
         this.modeTimer = 0;
@@ -237,6 +252,47 @@ export class Game {
           ? { ...g, mode: "frightened" as const, frightenedTimer: 8 }
           : g,
       );
+    }
+
+    // Fruit spawn — trigger at 1/3 and 2/3 dots eaten, max 2 per level
+    if (this.fruit === null && this.fruitSpawnCount < 2) {
+      const dotsEaten = this.initialDotCount - this.dots.length;
+      const threshold =
+        this.fruitSpawnCount === 0
+          ? Math.floor(this.initialDotCount / 3)
+          : Math.floor((2 * this.initialDotCount) / 3);
+      if (dotsEaten >= threshold) {
+        const spawnX = LEVEL_1.playerStart.col * TILE + TILE / 2;
+        const spawnY = LEVEL_1.playerStart.row * TILE + TILE / 2;
+        this.fruit = {
+          x: spawnX,
+          y: spawnY,
+          type: fruitTypeForLevel(this.level),
+          timer: FRUIT_DURATION,
+        };
+        this.fruitSpawnCount++;
+      }
+    }
+
+    // Fruit timer — remove when expired
+    if (this.fruit !== null) {
+      this.fruit = {
+        ...this.fruit,
+        timer: Math.max(0, this.fruit.timer - dt),
+      };
+      if (this.fruit.timer === 0) {
+        this.fruit = null;
+      }
+    }
+
+    // Fruit collection
+    if (this.fruit !== null) {
+      const fdx = this.player.x - this.fruit.x;
+      const fdy = this.player.y - this.fruit.y;
+      if (fdx * fdx + fdy * fdy < (PACMAN_RADIUS + FRUIT_RADIUS) ** 2) {
+        this.score += FRUIT_POINTS[this.fruit.type];
+        this.fruit = null;
+      }
     }
 
     // All dots eaten — level complete
@@ -331,6 +387,9 @@ export class Game {
     this.ctx.translate(0, HUD_HEIGHT);
     drawMaze(this.ctx, this.maze);
     drawDots(this.ctx, this.dots);
+    if (this.fruit !== null) {
+      drawFruit(this.ctx, this.fruit);
+    }
     for (const ghost of this.ghosts) {
       drawGhost(this.ctx, ghost);
     }
