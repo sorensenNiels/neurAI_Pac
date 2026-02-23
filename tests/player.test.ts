@@ -82,7 +82,11 @@ describe("updatePlayer — autonomous movement", () => {
   it("snaps to the nearest tile centre when turning perpendicular", () => {
     // Pac-Man at x=292 (2 px past the tile-14 centre at 290), moving right.
     // Requesting up: should snap x to 290 before committing the turn.
-    const p = { ...createPlayer(280, 310), x: 292, currentDir: "right" as const };
+    const p = {
+      ...createPlayer(280, 310),
+      x: 292,
+      currentDir: "right" as const,
+    };
     const turned = updatePlayer(p, "up", 0, BOUNDS); // dt=0: no travel, just turn
     expect(turned.x).toBe(290);
     expect(turned.currentDir).toBe("up");

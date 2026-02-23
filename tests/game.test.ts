@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
+import {
+  createPlayer,
+  PACMAN_RADIUS,
+  updatePlayer,
+} from "../src/entities/player";
 import { wrapTunnels } from "../src/game";
-import { createPlayer, PACMAN_RADIUS, updatePlayer } from "../src/entities/player";
 
 const CANVAS_WIDTH = 560;
 const CANVAS_HEIGHT = 620;
@@ -16,7 +20,10 @@ describe("wrapTunnels", () => {
   });
 
   it("wraps right exit to the left side", () => {
-    const p = { ...createPlayer(CANVAS_WIDTH, TUNNEL_Y), currentDir: "right" as const };
+    const p = {
+      ...createPlayer(CANVAS_WIDTH, TUNNEL_Y),
+      currentDir: "right" as const,
+    };
     const wrapped = wrapTunnels(p, TUNNEL_ROW, CANVAS_WIDTH);
     expect(wrapped.x).toBe(PACMAN_RADIUS); // 10
   });
@@ -32,7 +39,11 @@ describe("wrapTunnels", () => {
   });
 
   it("preserves all other player state when wrapping", () => {
-    const p = { ...createPlayer(-4, TUNNEL_Y), currentDir: "left" as const, facing: "left" as const };
+    const p = {
+      ...createPlayer(-4, TUNNEL_Y),
+      currentDir: "left" as const,
+      facing: "left" as const,
+    };
     const wrapped = wrapTunnels(p, TUNNEL_ROW, CANVAS_WIDTH);
     expect(wrapped.currentDir).toBe("left");
     expect(wrapped.facing).toBe("left");
@@ -53,7 +64,10 @@ describe("updatePlayer — tunnel x-bounds override", () => {
   });
 
   it("allows x to exceed (width - R) when xMax is set large", () => {
-    const p = { ...createPlayer(CANVAS_WIDTH - 2, 310), currentDir: "right" as const };
+    const p = {
+      ...createPlayer(CANVAS_WIDTH - 2, 310),
+      currentDir: "right" as const,
+    };
     const next = updatePlayer(p, null, 0.1, {
       width: CANVAS_WIDTH,
       height: CANVAS_HEIGHT,

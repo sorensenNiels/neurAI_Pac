@@ -8,7 +8,9 @@
       "Bash(echo:*)",
       "Bash(npx tsc:*)",
       "Bash(pnpm biome check:*)",
-      "Bash(pnpm build:*)"
+      "Bash(pnpm build:*)",
+      "Bash(pnpm test:run:*)",
+      "Bash(pnpm check:*)"
     ]
   }
 }

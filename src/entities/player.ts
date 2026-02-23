@@ -57,7 +57,11 @@ function tryTurn(
     }
   }
 
-  return { allowed: canMoveInDir(snapX, snapY, desiredDir, 1, isWallAt), snapX, snapY };
+  return {
+    allowed: canMoveInDir(snapX, snapY, desiredDir, 1, isWallAt),
+    snapX,
+    snapY,
+  };
 }
 
 export interface PlayerState {
@@ -109,19 +113,35 @@ function canMoveInDir(
   switch (dir) {
     case "right": {
       const nx = x + dist;
-      return !isWallAt(nx + R, y) && !isWallAt(nx + D, y - D) && !isWallAt(nx + D, y + D);
+      return (
+        !isWallAt(nx + R, y) &&
+        !isWallAt(nx + D, y - D) &&
+        !isWallAt(nx + D, y + D)
+      );
     }
     case "left": {
       const nx = x - dist;
-      return !isWallAt(nx - R, y) && !isWallAt(nx - D, y - D) && !isWallAt(nx - D, y + D);
+      return (
+        !isWallAt(nx - R, y) &&
+        !isWallAt(nx - D, y - D) &&
+        !isWallAt(nx - D, y + D)
+      );
     }
     case "down": {
       const ny = y + dist;
-      return !isWallAt(x, ny + R) && !isWallAt(x - D, ny + D) && !isWallAt(x + D, ny + D);
+      return (
+        !isWallAt(x, ny + R) &&
+        !isWallAt(x - D, ny + D) &&
+        !isWallAt(x + D, ny + D)
+      );
     }
     case "up": {
       const ny = y - dist;
-      return !isWallAt(x, ny - R) && !isWallAt(x - D, ny - D) && !isWallAt(x + D, ny - D);
+      return (
+        !isWallAt(x, ny - R) &&
+        !isWallAt(x - D, ny - D) &&
+        !isWallAt(x + D, ny - D)
+      );
     }
   }
 }
