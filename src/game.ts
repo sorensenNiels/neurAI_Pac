@@ -19,6 +19,8 @@ import {
   drawDots,
   drawGameOver,
   drawGhost,
+  drawLevel,
+  drawLevelComplete,
   drawLives,
   drawMaze,
   drawPlayer,
@@ -92,8 +94,11 @@ export class Game {
   private dots: Dot[];
   private score = 0;
   private lives = 3;
+  private level = 1;
   private respawnTimer = 0;
   private gameOver = false;
+  private levelComplete = false;
+  private levelCompleteTimer = 0;
   private isChasing = true; // start in chase so the ghost hunts immediately on exit
   private modeTimer = 0;
 
@@ -119,23 +124,23 @@ export class Game {
 
   /** Creates all three ghosts with staggered pen timers. */
   private createGhosts(): GhostState[] {
-    const starts = LEVEL_1.ghostStarts;
+    const [blinkyStart, pinkyStart, clydeStart] = LEVEL_1.ghostStarts;
     return [
       createGhost(
-        starts[0].col * TILE + TILE / 2,
-        starts[0].row * TILE + TILE / 2,
+        blinkyStart.col * TILE + TILE / 2,
+        blinkyStart.row * TILE + TILE / 2,
         "blinky",
         1,
       ),
       createGhost(
-        starts[1].col * TILE + TILE / 2,
-        starts[1].row * TILE + TILE / 2,
+        pinkyStart.col * TILE + TILE / 2,
+        pinkyStart.row * TILE + TILE / 2,
         "pinky",
         4,
       ),
       createGhost(
-        starts[2].col * TILE + TILE / 2,
-        starts[2].row * TILE + TILE / 2,
+        clydeStart.col * TILE + TILE / 2,
+        clydeStart.row * TILE + TILE / 2,
         "clyde",
         7,
       ),
@@ -163,6 +168,20 @@ export class Game {
 
   private update(dt: number): void {
     if (this.gameOver) return;
+
+    // Level complete — count down then restart the maze
+    if (this.levelComplete) {
+      this.levelCompleteTimer = Math.max(0, this.levelCompleteTimer - dt);
+      if (this.levelCompleteTimer === 0) {
+        this.levelComplete = false;
+        this.level++;
+        this.dots = createDotsFromMaze(this.maze);
+        this.resetPositions();
+        this.isChasing = true;
+        this.modeTimer = 0;
+      }
+      return;
+    }
 
     // Respawn freeze — show the current frame but skip all physics
     if (this.respawnTimer > 0) {
@@ -218,6 +237,13 @@ export class Game {
           ? { ...g, mode: "frightened" as const, frightenedTimer: 8 }
           : g,
       );
+    }
+
+    // All dots eaten — level complete
+    if (this.dots.length === 0) {
+      this.levelComplete = true;
+      this.levelCompleteTimer = 3;
+      return;
     }
 
     // Scatter / chase global mode cycling
@@ -297,6 +323,7 @@ export class Game {
 
     // HUD — drawn in canvas space before any transform
     drawScore(this.ctx, this.score, this.canvas.width);
+    drawLevel(this.ctx, this.level, this.canvas.width);
     drawLives(this.ctx, this.lives);
 
     // Maze, dots, ghosts and player live in maze coordinates; shift down past the HUD.
@@ -309,6 +336,10 @@ export class Game {
     }
     drawPlayer(this.ctx, this.player);
     this.ctx.restore();
+
+    if (this.levelComplete) {
+      drawLevelComplete(this.ctx, this.canvas.width, this.canvas.height);
+    }
 
     if (this.gameOver) {
       drawGameOver(this.ctx, this.canvas.width, this.canvas.height);

@@ -79,6 +79,22 @@ export function drawDots(ctx: CanvasRenderingContext2D, dots: Dot[]): void {
 }
 
 /**
+ * Draws the current level number centred in the HUD strip.
+ * Call before any ctx.translate so coordinates are in canvas space.
+ */
+export function drawLevel(
+  ctx: CanvasRenderingContext2D,
+  level: number,
+  canvasWidth: number,
+): void {
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 14px monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(`LVL ${level}`, canvasWidth / 2, HUD_HEIGHT / 2);
+}
+
+/**
  * Draws the score in the HUD strip at the top of the canvas.
  * Call before any ctx.translate so coordinates are in canvas space.
  */
@@ -233,6 +249,25 @@ function drawGhostEyes(
   ctx.arc(x - eyeOffX, eyeY, pupilR, 0, 2 * Math.PI);
   ctx.arc(x + eyeOffX, eyeY, pupilR, 0, 2 * Math.PI);
   ctx.fill();
+}
+
+/**
+ * Draws a semi-transparent "LEVEL CLEAR!" overlay centred on the canvas.
+ * Call after all other drawing, before ctx.restore, so it covers everything.
+ */
+export function drawLevelComplete(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+): void {
+  ctx.fillStyle = "rgba(0,0,0,0.6)";
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.fillStyle = "#00FF87";
+  ctx.font = "bold 32px monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("LEVEL CLEAR!", width / 2, height / 2);
 }
 
 /**

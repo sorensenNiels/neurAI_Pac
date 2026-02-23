@@ -15,10 +15,11 @@
 export interface MazeLayout {
   readonly tiles: readonly string[];
   readonly playerStart: { readonly col: number; readonly row: number };
-  readonly ghostStarts: ReadonlyArray<{
-    readonly col: number;
-    readonly row: number;
-  }>;
+  readonly ghostStarts: readonly [
+    { readonly col: number; readonly row: number },
+    { readonly col: number; readonly row: number },
+    { readonly col: number; readonly row: number },
+  ];
   readonly tunnelRow: number;
 }
 
