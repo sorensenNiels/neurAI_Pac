@@ -151,6 +151,11 @@ export function drawPlayer(
   ctx: CanvasRenderingContext2D,
   player: PlayerState,
 ): void {
+  if (player.dying) {
+    drawPlayerDeath(ctx, player);
+    return;
+  }
+
   // Mouth half-angle oscillates between 0 (closed) and MAX_MOUTH (fully open)
   // via |sin(t)|, producing the classic chomping rhythm. Timer pauses when
   // standing still so the mouth rests at a fixed slightly-open angle.
@@ -172,6 +177,50 @@ export function drawPlayer(
   );
   ctx.closePath();
   ctx.fill();
+}
+
+/**
+ * Death animation — two phases driven by player.deathProgress (0 → 1):
+ *
+ * Phase 1 (0 → 0.6): The mouth opens wider and wider from the facing
+ *   direction, eating the body inward until only a thin sliver remains.
+ *   mouthOpen goes from STOPPED_MOUTH up to 0.97·π (just short of π so
+ *   the canvas arc never degenerates into a full circle).
+ *
+ * Phase 2 (0.6 → 1.0): The remaining disc shrinks to nothing.
+ */
+function drawPlayerDeath(
+  ctx: CanvasRenderingContext2D,
+  player: PlayerState,
+): void {
+  const t = player.deathProgress;
+  const facingAngle = FACING_ANGLES[player.facing];
+
+  if (t < 0.6) {
+    const phase = t / 0.6; // 0 → 1
+    const mouthOpen = STOPPED_MOUTH + phase * (Math.PI * 0.97 - STOPPED_MOUTH);
+    ctx.fillStyle = "#FFD700";
+    ctx.beginPath();
+    ctx.moveTo(player.x, player.y);
+    ctx.arc(
+      player.x,
+      player.y,
+      PACMAN_RADIUS,
+      facingAngle + mouthOpen,
+      facingAngle - mouthOpen,
+    );
+    ctx.closePath();
+    ctx.fill();
+  } else {
+    const phase = (t - 0.6) / 0.4; // 0 → 1
+    const r = PACMAN_RADIUS * (1 - phase);
+    if (r > 0) {
+      ctx.fillStyle = "#FFD700";
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, r, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+  }
 }
 
 /**

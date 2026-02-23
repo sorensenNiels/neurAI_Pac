@@ -74,6 +74,10 @@ export interface PlayerState {
   desiredDir: Direction | null;
   mouthTimer: number; // seconds elapsed while moving; drives the chomp animation
   isMoving: boolean;
+  /** True while the death animation is playing. */
+  dying: boolean;
+  /** Progress through the death animation, 0 → 1. */
+  deathProgress: number;
 }
 
 /** Creates a player at the given pixel position. */
@@ -86,6 +90,8 @@ export function createPlayer(startX: number, startY: number): PlayerState {
     desiredDir: null,
     mouthTimer: 0,
     isMoving: false,
+    dying: false,
+    deathProgress: 0,
   };
 }
 
@@ -232,5 +238,7 @@ export function updatePlayer(
     desiredDir: remainingDesired,
     mouthTimer,
     isMoving,
+    dying: player.dying,
+    deathProgress: player.deathProgress,
   };
 }

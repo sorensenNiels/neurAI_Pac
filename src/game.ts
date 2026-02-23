@@ -43,6 +43,9 @@ const COLLISION_DIST = PACMAN_RADIUS + GHOST_RADIUS - 4; // 16 px
 const SCATTER_DURATION = 5;
 const CHASE_DURATION = 20;
 
+/** Duration of the death animation before lives are decremented (seconds). */
+const DEATH_ANIM_DURATION = 1.2;
+
 /** Duration of the respawn freeze after losing a life (seconds). */
 const RESPAWN_FREEZE = 1.5;
 
@@ -194,6 +197,25 @@ export class Game {
         this.resetPositions();
         this.isChasing = true;
         this.modeTimer = 0;
+      }
+      return;
+    }
+
+    // Death animation — advance progress; resolve lives/game-over when done
+    if (this.player.dying) {
+      const progress = Math.min(
+        1,
+        this.player.deathProgress + dt / DEATH_ANIM_DURATION,
+      );
+      this.player = { ...this.player, deathProgress: progress };
+      if (progress >= 1) {
+        this.lives--;
+        if (this.lives <= 0) {
+          this.gameOver = true;
+        } else {
+          this.respawnTimer = RESPAWN_FREEZE;
+          this.resetPositions();
+        }
       }
       return;
     }
@@ -359,14 +381,8 @@ export class Game {
           g.mode !== "pen" &&
           g.mode !== "exiting"
         ) {
-          // Ghost kills the player
-          this.lives--;
-          if (this.lives <= 0) {
-            this.gameOver = true;
-          } else {
-            this.respawnTimer = RESPAWN_FREEZE;
-            this.resetPositions();
-          }
+          // Ghost kills the player — start death animation
+          this.player = { ...this.player, dying: true, deathProgress: 0 };
           break; // one death per frame is enough
         }
       }
