@@ -30,7 +30,7 @@ import {
 const COLLISION_DIST = PACMAN_RADIUS + GHOST_RADIUS - 4; // 16 px
 
 /** Scatter/chase cycle durations (seconds). */
-const SCATTER_DURATION = 7;
+const SCATTER_DURATION = 5;
 const CHASE_DURATION = 20;
 
 /** Duration of the respawn freeze after losing a life (seconds). */
@@ -76,7 +76,7 @@ function wrapGhostTunnel(
  * Owns only:
  *   1. The RAF game loop (start / stop / loop)
  *   2. References to the canvas, Input handler, and current maze
- *   3. The current game state (player, ghost, dots, score, lives)
+ *   3. The current game state (player, ghosts, dots, score, lives)
  *
  * All logic lives in pure functions in entities/ and maze/.
  * All drawing lives in rendering/renderer.ts.
@@ -88,13 +88,13 @@ export class Game {
   private input: Input;
   private maze: MazeState;
   private player: PlayerState;
-  private ghost: GhostState;
+  private ghosts: GhostState[];
   private dots: Dot[];
   private score = 0;
   private lives = 3;
   private respawnTimer = 0;
   private gameOver = false;
-  private isChasing = false;
+  private isChasing = true; // start in chase so the ghost hunts immediately on exit
   private modeTimer = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -111,12 +111,35 @@ export class Game {
     // Convert tile-coordinate starts into pixels (tile centres)
     const startX = LEVEL_1.playerStart.col * TILE + TILE / 2;
     const startY = LEVEL_1.playerStart.row * TILE + TILE / 2;
-    const ghostStartX = LEVEL_1.ghostStart.col * TILE + TILE / 2;
-    const ghostStartY = LEVEL_1.ghostStart.row * TILE + TILE / 2;
 
     this.player = createPlayer(startX, startY);
-    this.ghost = createGhost(ghostStartX, ghostStartY);
+    this.ghosts = this.createGhosts();
     this.dots = createDotsFromMaze(this.maze);
+  }
+
+  /** Creates all three ghosts with staggered pen timers. */
+  private createGhosts(): GhostState[] {
+    const starts = LEVEL_1.ghostStarts;
+    return [
+      createGhost(
+        starts[0].col * TILE + TILE / 2,
+        starts[0].row * TILE + TILE / 2,
+        "blinky",
+        1,
+      ),
+      createGhost(
+        starts[1].col * TILE + TILE / 2,
+        starts[1].row * TILE + TILE / 2,
+        "pinky",
+        4,
+      ),
+      createGhost(
+        starts[2].col * TILE + TILE / 2,
+        starts[2].row * TILE + TILE / 2,
+        "clyde",
+        7,
+      ),
+    ];
   }
 
   start(): void {
@@ -187,14 +210,14 @@ export class Game {
     this.dots = eatDots(this.dots, this.player.x, this.player.y, PACMAN_RADIUS);
     this.score += prevCount - this.dots.length;
 
-    // Power pellet eaten → frighten the ghost (unless it's already eaten)
+    // Power pellet eaten → frighten all active ghosts (unless already eaten)
     const pelletsAfter = this.dots.filter((d) => d.isPellet).length;
-    if (pelletsAfter < pelletsBefore && this.ghost.mode !== "eaten") {
-      this.ghost = {
-        ...this.ghost,
-        mode: "frightened",
-        frightenedTimer: 8,
-      };
+    if (pelletsAfter < pelletsBefore) {
+      this.ghosts = this.ghosts.map((g) =>
+        g.mode !== "eaten"
+          ? { ...g, mode: "frightened" as const, frightenedTimer: 8 }
+          : g,
+      );
     }
 
     // Scatter / chase global mode cycling
@@ -203,48 +226,59 @@ export class Game {
     if (this.modeTimer >= phaseDuration) {
       this.modeTimer = 0;
       this.isChasing = !this.isChasing;
-      // Reverse ghost direction on mode switch (only in active maze modes)
-      const g = this.ghost;
-      if (g.mode === "scatter" || g.mode === "chase") {
-        this.ghost = { ...g, dir: oppositeDir(g.dir) };
-      }
+      // Reverse direction on mode switch for all actively roaming ghosts
+      this.ghosts = this.ghosts.map((g) => {
+        if (g.mode === "scatter" || g.mode === "chase") {
+          return { ...g, dir: oppositeDir(g.dir) };
+        }
+        return g;
+      });
     }
 
     // Update ghost AI
-    this.ghost = updateGhost(
-      this.ghost,
-      this.player.x,
-      this.player.y,
-      dt,
-      this.maze,
-      this.isChasing,
+    this.ghosts = this.ghosts.map((g) =>
+      wrapGhostTunnel(
+        updateGhost(
+          g,
+          this.player.x,
+          this.player.y,
+          this.player.facing,
+          dt,
+          this.maze,
+          this.isChasing,
+        ),
+        tunnelRow,
+        width,
+      ),
     );
 
-    // Tunnel wrapping for ghost
-    this.ghost = wrapGhostTunnel(this.ghost, tunnelRow, width);
+    // Collision detection for each ghost
+    for (let i = 0; i < this.ghosts.length; i++) {
+      const g = this.ghosts[i];
+      if (!g) continue;
+      const dx = this.player.x - g.x;
+      const dy = this.player.y - g.y;
+      const distSq = dx * dx + dy * dy;
 
-    // Collision detection
-    const dx = this.player.x - this.ghost.x;
-    const dy = this.player.y - this.ghost.y;
-    const distSq = dx * dx + dy * dy;
-
-    if (distSq < COLLISION_DIST * COLLISION_DIST) {
-      if (this.ghost.mode === "frightened") {
-        // Player eats the ghost
-        this.ghost = { ...this.ghost, mode: "eaten", frightenedTimer: 0 };
-        this.score += 200;
-      } else if (
-        this.ghost.mode !== "eaten" &&
-        this.ghost.mode !== "pen" &&
-        this.ghost.mode !== "exiting"
-      ) {
-        // Ghost kills the player
-        this.lives--;
-        if (this.lives <= 0) {
-          this.gameOver = true;
-        } else {
-          this.respawnTimer = RESPAWN_FREEZE;
-          this.resetPositions();
+      if (distSq < COLLISION_DIST * COLLISION_DIST) {
+        if (g.mode === "frightened") {
+          // Player eats the ghost
+          this.ghosts[i] = { ...g, mode: "eaten", frightenedTimer: 0 };
+          this.score += 200;
+        } else if (
+          g.mode !== "eaten" &&
+          g.mode !== "pen" &&
+          g.mode !== "exiting"
+        ) {
+          // Ghost kills the player
+          this.lives--;
+          if (this.lives <= 0) {
+            this.gameOver = true;
+          } else {
+            this.respawnTimer = RESPAWN_FREEZE;
+            this.resetPositions();
+          }
+          break; // one death per frame is enough
         }
       }
     }
@@ -253,11 +287,9 @@ export class Game {
   private resetPositions(): void {
     const startX = LEVEL_1.playerStart.col * TILE + TILE / 2;
     const startY = LEVEL_1.playerStart.row * TILE + TILE / 2;
-    const ghostStartX = LEVEL_1.ghostStart.col * TILE + TILE / 2;
-    const ghostStartY = LEVEL_1.ghostStart.row * TILE + TILE / 2;
 
     this.player = createPlayer(startX, startY);
-    this.ghost = createGhost(ghostStartX, ghostStartY);
+    this.ghosts = this.createGhosts();
   }
 
   private render(): void {
@@ -267,12 +299,14 @@ export class Game {
     drawScore(this.ctx, this.score, this.canvas.width);
     drawLives(this.ctx, this.lives);
 
-    // Maze, dots, ghost and player live in maze coordinates; shift down past the HUD.
+    // Maze, dots, ghosts and player live in maze coordinates; shift down past the HUD.
     this.ctx.save();
     this.ctx.translate(0, HUD_HEIGHT);
     drawMaze(this.ctx, this.maze);
     drawDots(this.ctx, this.dots);
-    drawGhost(this.ctx, this.ghost);
+    for (const ghost of this.ghosts) {
+      drawGhost(this.ctx, ghost);
+    }
     drawPlayer(this.ctx, this.player);
     this.ctx.restore();
 

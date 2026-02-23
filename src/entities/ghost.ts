@@ -4,10 +4,20 @@ import { getTile } from "../maze/maze";
 import { TILE } from "../maze/tiles";
 
 export const GHOST_RADIUS = 10; // pixels — same as Pac-Man
-export const GHOST_SPEED = 115; // pixels per second (slightly slower than Pac-Man's 120)
+export const GHOST_SPEED = 115; // pixels per second
 export const FRIGHTENED_DURATION = 8; // seconds
 export const GHOST_FLASH_THRESHOLD = 2; // seconds before end when ghost starts flashing
-const PEN_WAIT = 1; // seconds ghost waits in pen before exiting
+
+/**
+ * Each ghost has a unique personality that drives its chase-mode target and
+ * scatter corner.
+ *
+ *   blinky — targets Pac-Man's current tile directly (classic "shadow")
+ *   pinky  — targets 4 tiles ahead of Pac-Man's facing direction ("speedy")
+ *   clyde  — chases like Blinky when far away (>8 tiles), retreats to its own
+ *            scatter corner when close ("pokey")
+ */
+export type GhostPersonality = "blinky" | "pinky" | "clyde";
 
 // Pixel position of the pen exit — first open floor tile above the door (row 11, col 13)
 const PEN_EXIT_X = 13 * TILE + TILE / 2; // 270
@@ -17,9 +27,19 @@ const PEN_EXIT_Y = 11 * TILE + TILE / 2; // 230
 const PEN_ENTRANCE_X = 13 * TILE + TILE / 2; // 270
 const PEN_ENTRANCE_Y = 12 * TILE + TILE / 2; // 250
 
-// Blinky's scatter corner — top-right of the maze (col 25, row 0)
-export const BLINKY_SCATTER_X = 25 * TILE + TILE / 2; // 510
-export const BLINKY_SCATTER_Y = TILE / 2; // 10
+// Scatter corner targets — classic maze corners (reachable floor tiles)
+const SCATTER_TARGETS: Record<GhostPersonality, { x: number; y: number }> = {
+  blinky: { x: 25 * TILE + TILE / 2, y: 1 * TILE + TILE / 2 }, // top-right
+  pinky: { x: 2 * TILE + TILE / 2, y: 1 * TILE + TILE / 2 }, // top-left
+  clyde: { x: 1 * TILE + TILE / 2, y: 29 * TILE + TILE / 2 }, // bottom-left
+};
+
+// Body colour per personality (used in normal scatter/chase modes)
+export const GHOST_COLORS: Record<GhostPersonality, string> = {
+  blinky: "#FF0000", // red
+  pinky: "#FFB8FF", // pink
+  clyde: "#FFB852", // orange
+};
 
 export type GhostMode =
   | "pen"
@@ -38,16 +58,23 @@ export interface GhostState {
   frightenedTimer: number;
   /** Seconds remaining before the ghost starts leaving the pen. */
   penTimer: number;
+  personality: GhostPersonality;
 }
 
-export function createGhost(startX: number, startY: number): GhostState {
+export function createGhost(
+  startX: number,
+  startY: number,
+  personality: GhostPersonality,
+  penWait: number,
+): GhostState {
   return {
     x: startX,
     y: startY,
     dir: "up",
     mode: "pen",
     frightenedTimer: 0,
-    penTimer: PEN_WAIT,
+    penTimer: penWait,
+    personality,
   };
 }
 
@@ -65,9 +92,7 @@ export function oppositeDir(dir: Direction): Direction {
   }
 }
 
-/**
- * Snaps `pos` to the nearest tile centre (k*TILE + TILE/2).
- */
+/** Snaps `pos` to the nearest tile centre (k*TILE + TILE/2). */
 function snapToCenter(pos: number): number {
   return Math.round((pos - TILE / 2) / TILE) * TILE + TILE / 2;
 }
@@ -75,10 +100,6 @@ function snapToCenter(pos: number): number {
 /**
  * Returns the first tile centre crossed when moving from `from` to `to`,
  * or null if no centre was crossed.
- *
- * Tile centres sit at k*TILE + TILE/2 for integer k≥0.
- * For movement in the positive direction, returns the lowest centre in range;
- * for negative, the highest.  This ensures we act on the first crossing.
  */
 function findCrossedCenter(from: number, to: number): number | null {
   if (from === to) return null;
@@ -106,21 +127,64 @@ export function ghostIsWallAt(
   const tile = getTile(maze, col, row);
   if (tile === "wall") return true;
   if (tile === "door") {
-    // Door is passable only for ghosts entering/leaving the pen
     return mode !== "pen" && mode !== "exiting" && mode !== "eaten";
   }
   return false;
 }
 
 /**
+ * Computes the chase-mode target pixel for a ghost given the player's state.
+ *
+ *   blinky — Pac-Man's exact position
+ *   pinky  — 4 tiles ahead of Pac-Man's facing direction
+ *   clyde  — Pac-Man's position when >8 tiles away; own scatter corner when close
+ */
+function chaseTarget(
+  ghost: GhostState,
+  playerX: number,
+  playerY: number,
+  playerFacing: Direction,
+): { x: number; y: number } {
+  switch (ghost.personality) {
+    case "blinky":
+      return { x: playerX, y: playerY };
+
+    case "pinky": {
+      const ahead = 4 * TILE;
+      switch (playerFacing) {
+        case "right":
+          return { x: playerX + ahead, y: playerY };
+        case "left":
+          return { x: playerX - ahead, y: playerY };
+        case "down":
+          return { x: playerX, y: playerY + ahead };
+        case "up":
+          return { x: playerX, y: playerY - ahead };
+      }
+      break;
+    }
+
+    case "clyde": {
+      const dx = ghost.x - playerX;
+      const dy = ghost.y - playerY;
+      const distSq = dx * dx + dy * dy;
+      const threshold = 8 * TILE;
+      if (distSq > threshold * threshold) {
+        return { x: playerX, y: playerY }; // far: chase
+      }
+      return SCATTER_TARGETS.clyde; // close: retreat
+    }
+  }
+}
+
+/**
  * Chooses the best next direction for the ghost at an intersection.
  *
- * Rules (matching classic Pac-Man):
- *  - Never reverse (U-turns are banned except on mode change).
+ * Rules:
+ *  - Never reverse (U-turns banned except on mode change).
  *  - Never enter a wall (door passability depends on mode).
- *  - Frightened: choose randomly among valid directions.
- *  - Otherwise: choose the direction whose one-step-ahead tile centre is
- *    closest (Euclidean) to (targetX, targetY).
+ *  - Frightened: random among valid directions.
+ *  - Otherwise: direction whose one-step-ahead tile centre is closest to target.
  */
 export function pickDirection(
   x: number,
@@ -136,32 +200,24 @@ export function pickDirection(
 
   const valid = all.filter((d) => {
     if (d === reverse) return false;
-    // One tile ahead centre
     const nx = x + (d === "right" ? TILE : d === "left" ? -TILE : 0);
     const ny = y + (d === "down" ? TILE : d === "up" ? -TILE : 0);
     return !ghostIsWallAt(maze, nx, ny, mode);
   });
 
-  if (valid.length === 0) return reverse; // cornered — reverse as last resort
+  if (valid.length === 0) return reverse;
 
   if (mode === "frightened") {
     return valid[Math.floor(Math.random() * valid.length)] as Direction;
   }
 
-  // Pick direction minimising Euclidean distance to target
   return valid.reduce((best, d) => {
     const nx = x + (d === "right" ? TILE : d === "left" ? -TILE : 0);
     const ny = y + (d === "down" ? TILE : d === "up" ? -TILE : 0);
-    const dx = nx - targetX;
-    const dy = ny - targetY;
-    const dist = dx * dx + dy * dy;
-
+    const dist = (nx - targetX) ** 2 + (ny - targetY) ** 2;
     const bx = x + (best === "right" ? TILE : best === "left" ? -TILE : 0);
     const by = y + (best === "down" ? TILE : best === "up" ? -TILE : 0);
-    const bdx = bx - targetX;
-    const bdy = by - targetY;
-    const bestDist = bdx * bdx + bdy * bdy;
-
+    const bestDist = (bx - targetX) ** 2 + (by - targetY) ** 2;
     return dist < bestDist ? d : best;
   });
 }
@@ -169,27 +225,19 @@ export function pickDirection(
 /**
  * Pure function — returns the new GhostState for the next frame.
  *
- * Movement model:
- *   The ghost moves at GHOST_SPEED px/s in its current direction.
- *   Each frame, we check whether the movement crossed a tile centre.
- *   If it did, we snap to that centre, pick the next direction, and apply
- *   any remaining distance in the new direction.
- *
- *   Using a "did we cross a centre?" test (rather than "are we near a centre?")
- *   avoids the proximity-snap trap: a proximity check with threshold ≥ per-frame
- *   distance would re-trigger every frame, keeping the ghost frozen at the centre.
- *
- * @param ghost      Current state
- * @param playerX    Player pixel x (used as chase target)
- * @param playerY    Player pixel y
- * @param dt         Frame delta-time in seconds
- * @param maze       Maze state for wall checks
- * @param isChasing  True when the global mode is chase, false for scatter
+ * @param ghost         Current state
+ * @param playerX       Player pixel x
+ * @param playerY       Player pixel y
+ * @param playerFacing  Player facing direction (used by Pinky's targeting)
+ * @param dt            Frame delta-time in seconds
+ * @param maze          Maze state for wall checks
+ * @param isChasing     True when the global mode is chase, false for scatter
  */
 export function updateGhost(
   ghost: GhostState,
   playerX: number,
   playerY: number,
+  playerFacing: Direction,
   dt: number,
   maze: MazeState,
   isChasing: boolean,
@@ -210,7 +258,7 @@ export function updateGhost(
     if (penTimer === 0) {
       mode = "exiting";
     }
-    return { x, y, dir, mode, frightenedTimer, penTimer };
+    return { ...ghost, mode, penTimer, frightenedTimer };
   }
 
   // ── Target selection ────────────────────────────────────────────────────────
@@ -222,14 +270,18 @@ export function updateGhost(
       targetX = PEN_EXIT_X;
       targetY = PEN_EXIT_Y;
       break;
-    case "scatter":
-      targetX = BLINKY_SCATTER_X;
-      targetY = BLINKY_SCATTER_Y;
+    case "scatter": {
+      const corner = SCATTER_TARGETS[ghost.personality];
+      targetX = corner.x;
+      targetY = corner.y;
       break;
-    case "chase":
-      targetX = playerX;
-      targetY = playerY;
+    }
+    case "chase": {
+      const t = chaseTarget(ghost, playerX, playerY, playerFacing);
+      targetX = t.x;
+      targetY = t.y;
       break;
+    }
     case "frightened":
       targetX = 0;
       targetY = 0;
@@ -247,7 +299,6 @@ export function updateGhost(
   const prevX = x;
   const prevY = y;
 
-  // Apply the full frame's movement in the current direction
   switch (dir) {
     case "right":
       x += dist;
@@ -263,7 +314,6 @@ export function updateGhost(
       break;
   }
 
-  // Check whether we crossed a tile centre this frame on the movement axis
   const axisFrom = movingH ? prevX : prevY;
   const axisTo = movingH ? x : y;
   const crossed = findCrossedCenter(axisFrom, axisTo);
@@ -272,7 +322,6 @@ export function updateGhost(
     const distToCenter = Math.abs(crossed - axisFrom);
     const remaining = dist - distToCenter;
 
-    // Snap to the tile centre (including the off-axis coordinate)
     if (movingH) {
       x = crossed;
       y = snapToCenter(prevY);
@@ -281,7 +330,6 @@ export function updateGhost(
       x = snapToCenter(prevX);
     }
 
-    // Mode transitions that happen at specific tile centres
     if (
       mode === "exiting" &&
       Math.abs(x - PEN_EXIT_X) < 1 &&
@@ -303,10 +351,8 @@ export function updateGhost(
       penTimer = 1;
     }
 
-    // Pick the next direction (using the updated mode so targets are correct)
     dir = pickDirection(x, y, dir, targetX, targetY, mode, maze);
 
-    // Apply remaining distance in the new direction
     if (remaining > 0) {
       switch (dir) {
         case "right":
@@ -325,5 +371,5 @@ export function updateGhost(
     }
   }
 
-  return { x, y, dir, mode, frightenedTimer, penTimer };
+  return { ...ghost, x, y, dir, mode, frightenedTimer, penTimer };
 }

@@ -1,5 +1,9 @@
 import type { GhostState } from "../entities/ghost";
-import { GHOST_FLASH_THRESHOLD, GHOST_RADIUS } from "../entities/ghost";
+import {
+  GHOST_COLORS,
+  GHOST_FLASH_THRESHOLD,
+  GHOST_RADIUS,
+} from "../entities/ghost";
 import type { PlayerState } from "../entities/player";
 import {
   MAX_MOUTH,
@@ -173,7 +177,7 @@ export function drawGhost(
       bodyColor = "#0000ff";
     }
   } else {
-    bodyColor = "#FF0000"; // Blinky red
+    bodyColor = GHOST_COLORS[ghost.personality];
   }
 
   // Ghost body path: semicircle top + rectangular sides + wavy bottom (3 bumps)

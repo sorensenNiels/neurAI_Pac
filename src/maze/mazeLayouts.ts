@@ -15,7 +15,10 @@
 export interface MazeLayout {
   readonly tiles: readonly string[];
   readonly playerStart: { readonly col: number; readonly row: number };
-  readonly ghostStart: { readonly col: number; readonly row: number };
+  readonly ghostStarts: ReadonlyArray<{
+    readonly col: number;
+    readonly row: number;
+  }>;
   readonly tunnelRow: number;
 }
 
@@ -61,6 +64,10 @@ export const LEVEL_1: MazeLayout = {
     "############################", // 30
   ],
   playerStart: { col: 13, row: 23 }, // open floor in row 23, centre of the board
-  ghostStart: { col: 13, row: 14 }, // centre of the ghost pen
+  ghostStarts: [
+    { col: 13, row: 14 }, // Blinky — pen centre
+    { col: 13, row: 13 }, // Pinky  — one row above centre
+    { col: 15, row: 14 }, // Clyde  — right side of pen
+  ],
   tunnelRow: 14,
 };

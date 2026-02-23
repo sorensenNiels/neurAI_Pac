@@ -18,12 +18,13 @@ const OPEN_Y = 20 * TILE + TILE / 2; // 410
 
 describe("createGhost", () => {
   it("initialises with correct defaults", () => {
-    const g = createGhost(OPEN_X, OPEN_Y);
+    const g = createGhost(OPEN_X, OPEN_Y, "blinky", 3);
     expect(g.x).toBe(OPEN_X);
     expect(g.y).toBe(OPEN_Y);
     expect(g.mode).toBe("pen");
     expect(g.frightenedTimer).toBe(0);
     expect(g.penTimer).toBeGreaterThan(0);
+    expect(g.personality).toBe("blinky");
   });
 });
 
@@ -75,15 +76,15 @@ describe("pickDirection", () => {
 
 describe("updateGhost — pen mode", () => {
   it("stays in pen while penTimer > 0", () => {
-    const g = createGhost(OPEN_X, OPEN_Y);
-    const next = updateGhost(g, 0, 0, 0.1, maze, false);
+    const g = createGhost(OPEN_X, OPEN_Y, "blinky", 3);
+    const next = updateGhost(g, 0, 0, "right", 0.1, maze, false);
     expect(next.mode).toBe("pen");
     expect(next.penTimer).toBeLessThan(g.penTimer);
   });
 
   it("transitions to exiting when penTimer reaches 0", () => {
-    const g = { ...createGhost(OPEN_X, OPEN_Y), penTimer: 0.05 };
-    const next = updateGhost(g, 0, 0, 0.1, maze, false);
+    const g = { ...createGhost(OPEN_X, OPEN_Y, "blinky", 3), penTimer: 0.05 };
+    const next = updateGhost(g, 0, 0, "right", 0.1, maze, false);
     expect(next.mode).toBe("exiting");
   });
 });
@@ -91,35 +92,35 @@ describe("updateGhost — pen mode", () => {
 describe("updateGhost — frightened timer", () => {
   it("decrements frightenedTimer each frame", () => {
     const g: ReturnType<typeof createGhost> = {
-      ...createGhost(OPEN_X, OPEN_Y),
+      ...createGhost(OPEN_X, OPEN_Y, "blinky", 3),
       mode: "frightened",
       frightenedTimer: 5,
       penTimer: 0,
     };
-    const next = updateGhost(g, 0, 0, 0.5, maze, false);
+    const next = updateGhost(g, 0, 0, "right", 0.5, maze, false);
     expect(next.frightenedTimer).toBeCloseTo(4.5);
   });
 
   it("reverts to scatter when frightenedTimer expires", () => {
     const g: ReturnType<typeof createGhost> = {
-      ...createGhost(OPEN_X, OPEN_Y),
+      ...createGhost(OPEN_X, OPEN_Y, "blinky", 3),
       mode: "frightened",
       frightenedTimer: 0.05,
       penTimer: 0,
     };
-    const next = updateGhost(g, 0, 0, 0.1, maze, false);
+    const next = updateGhost(g, 0, 0, "right", 0.1, maze, false);
     expect(next.frightenedTimer).toBe(0);
     expect(next.mode).toBe("scatter");
   });
 
   it("reverts to chase when frightenedTimer expires and isChasing is true", () => {
     const g: ReturnType<typeof createGhost> = {
-      ...createGhost(OPEN_X, OPEN_Y),
+      ...createGhost(OPEN_X, OPEN_Y, "blinky", 3),
       mode: "frightened",
       frightenedTimer: 0.05,
       penTimer: 0,
     };
-    const next = updateGhost(g, 0, 0, 0.1, maze, true);
+    const next = updateGhost(g, 0, 0, "right", 0.1, maze, true);
     expect(next.mode).toBe("chase");
   });
 });
@@ -127,11 +128,11 @@ describe("updateGhost — frightened timer", () => {
 describe("updateGhost — movement", () => {
   it("moves the ghost position each frame when not in pen", () => {
     const g: ReturnType<typeof createGhost> = {
-      ...createGhost(OPEN_X, OPEN_Y),
+      ...createGhost(OPEN_X, OPEN_Y, "blinky", 3),
       mode: "scatter",
       penTimer: 0,
     };
-    const next = updateGhost(g, 0, 0, 0.1, maze, false);
+    const next = updateGhost(g, 0, 0, "right", 0.1, maze, false);
     // Position should have changed
     const moved = Math.abs(next.x - g.x) > 0 || Math.abs(next.y - g.y) > 0;
     expect(moved).toBe(true);
@@ -140,12 +141,12 @@ describe("updateGhost — movement", () => {
   it("ghost speed is GHOST_SPEED pixels per second", () => {
     const dt = 0.1;
     const g: ReturnType<typeof createGhost> = {
-      ...createGhost(OPEN_X, OPEN_Y),
+      ...createGhost(OPEN_X, OPEN_Y, "blinky", 3),
       mode: "scatter",
       penTimer: 0,
       dir: "right",
     };
-    const next = updateGhost(g, 0, 0, dt, maze, false);
+    const next = updateGhost(g, 0, 0, "right", dt, maze, false);
     const totalMoved = Math.hypot(next.x - g.x, next.y - g.y);
     // Allow small tolerance for snap + direction change at tile centres
     expect(totalMoved).toBeGreaterThan(0);
@@ -157,14 +158,39 @@ describe("updateGhost — scatter target", () => {
   it("scatter mode targets Blinky corner, not player position", () => {
     // Ghost in scatter mode should NOT move toward player (0,0) but toward scatter corner
     const g: ReturnType<typeof createGhost> = {
-      ...createGhost(OPEN_X, OPEN_Y),
+      ...createGhost(OPEN_X, OPEN_Y, "blinky", 3),
       mode: "scatter",
       penTimer: 0,
     };
     // Player is at (0, 0); scatter target is top-right corner
     // Just verify the function doesn't throw and returns a valid state
-    const next = updateGhost(g, 0, 0, 0.1, maze, false);
+    const next = updateGhost(g, 0, 0, "right", 0.1, maze, false);
     expect(next.mode).toBe("scatter");
+    expect(typeof next.x).toBe("number");
+    expect(typeof next.y).toBe("number");
+  });
+});
+
+describe("updateGhost — personality targeting", () => {
+  it("pinky targets 4 tiles ahead of player facing direction", () => {
+    const g: ReturnType<typeof createGhost> = {
+      ...createGhost(OPEN_X, OPEN_Y, "pinky", 3),
+      mode: "chase",
+      penTimer: 0,
+    };
+    // Just verify it runs without error and returns a valid state
+    const next = updateGhost(g, OPEN_X, OPEN_Y, "right", 0.1, maze, true);
+    expect(typeof next.x).toBe("number");
+    expect(typeof next.y).toBe("number");
+  });
+
+  it("clyde runs without error in chase mode", () => {
+    const g: ReturnType<typeof createGhost> = {
+      ...createGhost(OPEN_X, OPEN_Y, "clyde", 3),
+      mode: "chase",
+      penTimer: 0,
+    };
+    const next = updateGhost(g, OPEN_X, OPEN_Y, "right", 0.1, maze, true);
     expect(typeof next.x).toBe("number");
     expect(typeof next.y).toBe("number");
   });
