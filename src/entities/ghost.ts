@@ -4,7 +4,9 @@ import { getTile } from "../maze/maze";
 import { TILE } from "../maze/tiles";
 
 export const GHOST_RADIUS = 10; // pixels — same as Pac-Man
-export const GHOST_SPEED = 115; // pixels per second
+export const GHOST_SPEED = 115; // pixels per second (normal)
+export const GHOST_FRIGHTENED_SPEED = 65; // slower when blue — easier to catch
+export const GHOST_EATEN_SPEED = 200; // fast when returning to pen as eyes
 export const FRIGHTENED_DURATION = 8; // seconds
 export const GHOST_FLASH_THRESHOLD = 2; // seconds before end when ghost starts flashing
 
@@ -113,6 +115,74 @@ function findCrossedCenter(from: number, to: number): number | null {
 }
 
 /**
+ * BFS from (startCol, startRow) toward (targetCol, targetRow).
+ *
+ * Returns the first direction the ghost should take to reach the target via
+ * the shortest path, or null if the target is unreachable.
+ *
+ * `excludeDir` is never used as the first step (no U-turn at the current
+ * intersection).  Subsequent BFS steps are unconstrained — only the entry
+ * direction at the starting tile is blocked.
+ */
+function bfsFirstDir(
+  startCol: number,
+  startRow: number,
+  targetCol: number,
+  targetRow: number,
+  excludeDir: Direction,
+  mode: GhostMode,
+  maze: MazeState,
+): Direction | null {
+  if (startCol === targetCol && startRow === targetRow) return null;
+
+  const dirs: Direction[] = ["up", "down", "left", "right"];
+  const dCol: Record<Direction, number> = { right: 1, left: -1, up: 0, down: 0 };
+  const dRow: Record<Direction, number> = { right: 0, left: 0, up: -1, down: 1 };
+
+  type Node = { col: number; row: number; firstDir: Direction };
+  const queue: Node[] = [];
+  const visited = new Set<number>();
+
+  // Unique integer key per tile — avoids string allocations in the hot path
+  const key = (c: number, r: number) => r * maze.cols + c;
+  visited.add(key(startCol, startRow));
+
+  for (const d of dirs) {
+    if (d === excludeDir) continue;
+    const nc = startCol + dCol[d];
+    const nr = startRow + dRow[d];
+    if (!ghostIsWallAt(maze, nc * TILE + TILE / 2, nr * TILE + TILE / 2, mode)) {
+      const k = key(nc, nr);
+      if (!visited.has(k)) {
+        visited.add(k);
+        if (nc === targetCol && nr === targetRow) return d;
+        queue.push({ col: nc, row: nr, firstDir: d });
+      }
+    }
+  }
+
+  while (queue.length > 0) {
+    const node = queue.shift();
+    if (node === undefined) break;
+    const { col, row, firstDir } = node;
+    for (const d of dirs) {
+      const nc = col + dCol[d];
+      const nr = row + dRow[d];
+      if (!ghostIsWallAt(maze, nc * TILE + TILE / 2, nr * TILE + TILE / 2, mode)) {
+        const k = key(nc, nr);
+        if (!visited.has(k)) {
+          visited.add(k);
+          if (nc === targetCol && nr === targetRow) return firstDir;
+          queue.push({ col: nc, row: nr, firstDir });
+        }
+      }
+    }
+  }
+
+  return null; // target tile is unreachable (wall or off-grid)
+}
+
+/**
  * Returns true if the given pixel position would land the ghost inside a wall.
  * Ghosts can pass through the door only when in pen/exiting/eaten modes.
  */
@@ -186,7 +256,9 @@ function chaseTarget(
  *  - Frightened: exclude the direction most directly toward Pac-Man, then pick
  *    randomly from the remainder. This breaks deterministic loops while still
  *    ensuring the ghost never actively runs at the player.
- *  - Otherwise: direction whose one-step-ahead tile centre is closest to target.
+ *  - Otherwise: BFS shortest-path toward the target tile.  A greedy
+ *    one-step-ahead fallback is used only when the target is unreachable
+ *    (e.g. a wall tile used as a scatter anchor outside the maze).
  */
 export function pickDirection(
   x: number,
@@ -230,6 +302,24 @@ export function pickDirection(
     ] as Direction;
   }
 
+  // BFS: always take the true shortest path to the target tile.
+  const startCol = Math.round((x - TILE / 2) / TILE);
+  const startRow = Math.round((y - TILE / 2) / TILE);
+  const targetCol = Math.round((targetX - TILE / 2) / TILE);
+  const targetRow = Math.round((targetY - TILE / 2) / TILE);
+  const bfsDir = bfsFirstDir(
+    startCol,
+    startRow,
+    targetCol,
+    targetRow,
+    reverse,
+    mode,
+    maze,
+  );
+  if (bfsDir !== null) return bfsDir;
+
+  // Greedy fallback — used only when the target tile is a wall or off-grid
+  // (e.g. a scatter anchor placed outside the passable maze area).
   return valid.reduce((best, d) => {
     const nx = x + (d === "right" ? TILE : d === "left" ? -TILE : 0);
     const ny = y + (d === "down" ? TILE : d === "up" ? -TILE : 0);
@@ -312,7 +402,13 @@ export function updateGhost(
   }
 
   // ── Movement with crossing-based direction updates ──────────────────────────
-  const dist = GHOST_SPEED * dt;
+  const speed =
+    mode === "frightened"
+      ? GHOST_FRIGHTENED_SPEED
+      : mode === "eaten"
+        ? GHOST_EATEN_SPEED
+        : GHOST_SPEED;
+  const dist = speed * dt;
   const movingH = dir === "left" || dir === "right";
 
   const prevX = x;

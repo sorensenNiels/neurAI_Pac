@@ -8,6 +8,7 @@ import {
 import type { GhostState } from "./entities/ghost";
 import {
   createGhost,
+  FRIGHTENED_DURATION,
   GHOST_RADIUS,
   oppositeDir,
   updateGhost,
@@ -277,7 +278,13 @@ export class Game {
           g.mode === "chase" ||
           g.mode === "frightened"
         ) {
-          return { ...g, mode: "frightened" as const, frightenedTimer: 8 };
+          // Reverse direction on entering frightened (classic Pac-Man behaviour)
+          return {
+            ...g,
+            mode: "frightened" as const,
+            frightenedTimer: FRIGHTENED_DURATION,
+            dir: oppositeDir(g.dir),
+          };
         }
         return g;
       });
@@ -331,19 +338,25 @@ export class Game {
       return;
     }
 
-    // Scatter / chase global mode cycling
-    this.modeTimer += dt;
-    const phaseDuration = this.isChasing ? CHASE_DURATION : SCATTER_DURATION;
-    if (this.modeTimer >= phaseDuration) {
-      this.modeTimer = 0;
-      this.isChasing = !this.isChasing;
-      // Reverse direction on mode switch for all actively roaming ghosts
-      this.ghosts = this.ghosts.map((g) => {
-        if (g.mode === "scatter" || g.mode === "chase") {
-          return { ...g, dir: oppositeDir(g.dir) };
-        }
-        return g;
-      });
+    // Scatter / chase global mode cycling.
+    // The timer pauses while any ghost is frightened (classic Pac-Man behaviour:
+    // the scatter/chase phase clock freezes during the power-pellet window so
+    // ghosts reliably resume chasing once frightened mode ends).
+    const anyFrightened = this.ghosts.some((g) => g.mode === "frightened");
+    if (!anyFrightened) {
+      this.modeTimer += dt;
+      const phaseDuration = this.isChasing ? CHASE_DURATION : SCATTER_DURATION;
+      if (this.modeTimer >= phaseDuration) {
+        this.modeTimer = 0;
+        this.isChasing = !this.isChasing;
+        // Reverse direction on mode switch for all actively roaming ghosts
+        this.ghosts = this.ghosts.map((g) => {
+          if (g.mode === "scatter" || g.mode === "chase") {
+            return { ...g, dir: oppositeDir(g.dir) };
+          }
+          return g;
+        });
+      }
     }
 
     // Update ghost AI
