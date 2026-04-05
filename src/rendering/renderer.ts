@@ -6,6 +6,7 @@ import {
   GHOST_FLASH_THRESHOLD,
   GHOST_RADIUS,
 } from "../entities/ghost";
+import type { HighScoreEntry } from "../highscores";
 import type { PlayerState } from "../entities/player";
 import {
   MAX_MOUTH,
@@ -72,12 +73,52 @@ export function drawMaze(ctx: CanvasRenderingContext2D, maze: MazeState): void {
 /** Draws all remaining (uneaten) dots and power pellets. */
 export function drawDots(ctx: CanvasRenderingContext2D, dots: Dot[]): void {
   for (const dot of dots) {
-    ctx.fillStyle = "#fff";
-    const r = dot.isPellet ? DOT_RADIUS * 2.5 : DOT_RADIUS;
-    ctx.beginPath();
-    ctx.arc(dot.x, dot.y, r, 0, 2 * Math.PI);
-    ctx.fill();
+    if (dot.isHeroPellet) {
+      drawHeroPellet(ctx, dot.x, dot.y);
+    } else {
+      ctx.fillStyle = "#fff";
+      const r = dot.isPellet ? DOT_RADIUS * 2.5 : DOT_RADIUS;
+      ctx.beginPath();
+      ctx.arc(dot.x, dot.y, r, 0, 2 * Math.PI);
+      ctx.fill();
+    }
   }
+}
+
+/**
+ * Draws a glowing golden 5-pointed star to represent a Hero Pellet.
+ * Larger and more distinctive than power pellets to signal its rarity.
+ */
+function drawHeroPellet(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+): void {
+  const outerR = 8;
+  const innerR = 3.5;
+  const points = 5;
+  const step = Math.PI / points;
+
+  ctx.save();
+  ctx.shadowColor = "#FFD700";
+  ctx.shadowBlur = 10;
+  ctx.fillStyle = "#FFD700";
+  ctx.strokeStyle = "#FF8C00";
+  ctx.lineWidth = 1;
+
+  ctx.beginPath();
+  for (let i = 0; i < points * 2; i++) {
+    const r = i % 2 === 0 ? outerR : innerR;
+    const angle = i * step - Math.PI / 2; // start from top
+    const sx = cx + r * Math.cos(angle);
+    const sy = cy + r * Math.sin(angle);
+    if (i === 0) ctx.moveTo(sx, sy);
+    else ctx.lineTo(sx, sy);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
 }
 
 /**
@@ -352,4 +393,181 @@ export function drawGameOver(
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText("GAME OVER", width / 2, height / 2);
+}
+
+/**
+ * Draws the attract / start screen with the title, high-score table, and a
+ * blinking "PRESS ENTER TO START" prompt.
+ */
+export function drawAttractScreen(
+  ctx: CanvasRenderingContext2D,
+  scores: HighScoreEntry[],
+  width: number,
+  height: number,
+  blinkOn: boolean,
+): void {
+  // Background
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, width, height);
+
+  // Title
+  ctx.fillStyle = "#FFD700";
+  ctx.font = "bold 52px monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText("PAC-MAN", width / 2, 76);
+
+  // Decorative ghost row
+  const ghostColors = ["#FF0000", "#FFB8FF", "#FFB852"];
+  for (let i = 0; i < ghostColors.length; i++) {
+    const gx = width / 2 + (i - 1) * 44;
+    const gy = 110;
+    const r = 12;
+    ctx.fillStyle = ghostColors[i] ?? "#fff";
+    ctx.beginPath();
+    ctx.arc(gx, gy - r / 2, r, Math.PI, 0);
+    ctx.lineTo(gx + r, gy + r / 2);
+    const bR = r / 3;
+    ctx.arc(gx + r - bR, gy + r / 2, bR, 0, Math.PI, true);
+    ctx.arc(gx, gy + r / 2, bR, 0, Math.PI, true);
+    ctx.arc(gx - r + bR, gy + r / 2, bR, 0, Math.PI, true);
+    ctx.lineTo(gx - r, gy - r / 2);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // High-scores heading
+  ctx.fillStyle = "#00BFFF";
+  ctx.font = "bold 18px monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText("HIGH SCORES", width / 2, 148);
+
+  if (scores.length === 0) {
+    ctx.fillStyle = "#888";
+    ctx.font = "14px monospace";
+    ctx.fillText("NO HIGH SCORES YET", width / 2, 190);
+  } else {
+    // Column positions
+    const rankX = width / 2 - 160;
+    const nameX = width / 2 - 80;
+    const scoreX = width / 2 + 60;
+    const lvlX = width / 2 + 140;
+    const rowH = 26;
+    const startY = 172;
+
+    // Header row
+    ctx.fillStyle = "#aaa";
+    ctx.font = "13px monospace";
+    ctx.textAlign = "left";
+    ctx.fillText("#", rankX, startY);
+    ctx.fillText("NAME", nameX, startY);
+    ctx.fillText("SCORE", scoreX, startY);
+    ctx.fillText("LVL", lvlX, startY);
+
+    for (let i = 0; i < scores.length; i++) {
+      const entry = scores[i];
+      if (!entry) continue;
+      const y = startY + rowH * (i + 1);
+
+      // Alternate row colouring — top 3 get gold, rest white
+      ctx.fillStyle = i === 0 ? "#FFD700" : i < 3 ? "#C0C0C0" : "#fff";
+      ctx.font = i === 0 ? "bold 14px monospace" : "14px monospace";
+      ctx.textAlign = "left";
+      ctx.fillText(`${i + 1}.`, rankX, y);
+      ctx.fillText(entry.initials, nameX, y);
+      ctx.textAlign = "right";
+      ctx.fillText(`${entry.score}`, scoreX + 50, y);
+      ctx.textAlign = "left";
+      ctx.fillText(`${entry.level}`, lvlX, y);
+    }
+  }
+
+  // Blinking prompt
+  if (blinkOn) {
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 16px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText("PRESS ENTER TO START", width / 2, height - 28);
+  }
+}
+
+/**
+ * Draws the initials-entry screen shown when the player earns a new high score.
+ * `initials` is a 3-element array of uppercase letters; `cursorPos` (0–2) is the
+ * currently-active position. `blinkOn` drives the cursor blink.
+ */
+export function drawEnterInitials(
+  ctx: CanvasRenderingContext2D,
+  initials: string[],
+  cursorPos: number,
+  score: number,
+  level: number,
+  width: number,
+  height: number,
+  blinkOn: boolean,
+): void {
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, width, height);
+
+  // Heading
+  ctx.fillStyle = "#FFD700";
+  ctx.font = "bold 28px monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText("NEW HIGH SCORE!", width / 2, 100);
+
+  // Score + level
+  ctx.fillStyle = "#fff";
+  ctx.font = "18px monospace";
+  ctx.fillText(`SCORE: ${score}   LVL: ${level}`, width / 2, 140);
+
+  // Prompt
+  ctx.fillStyle = "#00BFFF";
+  ctx.font = "bold 18px monospace";
+  ctx.fillText("ENTER YOUR INITIALS", width / 2, 190);
+
+  // Three letter boxes
+  const boxW = 48;
+  const boxH = 60;
+  const gap = 16;
+  const totalW = 3 * boxW + 2 * gap;
+  const startX = width / 2 - totalW / 2;
+  const boxY = 220;
+
+  for (let i = 0; i < 3; i++) {
+    const bx = startX + i * (boxW + gap);
+    const isActive = i === cursorPos;
+
+    // Box background
+    ctx.fillStyle = isActive ? "#1a1aff" : "#222";
+    ctx.fillRect(bx, boxY, boxW, boxH);
+
+    // Box border
+    ctx.strokeStyle = isActive ? "#00BFFF" : "#555";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(bx, boxY, boxW, boxH);
+
+    // Letter
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 36px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(initials[i] ?? "A", bx + boxW / 2, boxY + boxH / 2);
+
+    // Blinking cursor underline on active box
+    if (isActive && blinkOn) {
+      ctx.fillStyle = "#00BFFF";
+      ctx.fillRect(bx + 6, boxY + boxH - 6, boxW - 12, 3);
+    }
+  }
+
+  // Instructions
+  ctx.fillStyle = "#aaa";
+  ctx.font = "13px monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText("TYPE LETTERS  •  BACKSPACE to fix", width / 2, 316);
+  ctx.fillText("ENTER to confirm", width / 2, 336);
 }

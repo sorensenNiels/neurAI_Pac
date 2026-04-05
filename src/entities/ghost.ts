@@ -136,8 +136,18 @@ function bfsFirstDir(
   if (startCol === targetCol && startRow === targetRow) return null;
 
   const dirs: Direction[] = ["up", "down", "left", "right"];
-  const dCol: Record<Direction, number> = { right: 1, left: -1, up: 0, down: 0 };
-  const dRow: Record<Direction, number> = { right: 0, left: 0, up: -1, down: 1 };
+  const dCol: Record<Direction, number> = {
+    right: 1,
+    left: -1,
+    up: 0,
+    down: 0,
+  };
+  const dRow: Record<Direction, number> = {
+    right: 0,
+    left: 0,
+    up: -1,
+    down: 1,
+  };
 
   type Node = { col: number; row: number; firstDir: Direction };
   const queue: Node[] = [];
@@ -151,7 +161,9 @@ function bfsFirstDir(
     if (d === excludeDir) continue;
     const nc = startCol + dCol[d];
     const nr = startRow + dRow[d];
-    if (!ghostIsWallAt(maze, nc * TILE + TILE / 2, nr * TILE + TILE / 2, mode)) {
+    if (
+      !ghostIsWallAt(maze, nc * TILE + TILE / 2, nr * TILE + TILE / 2, mode)
+    ) {
       const k = key(nc, nr);
       if (!visited.has(k)) {
         visited.add(k);
@@ -168,7 +180,9 @@ function bfsFirstDir(
     for (const d of dirs) {
       const nc = col + dCol[d];
       const nr = row + dRow[d];
-      if (!ghostIsWallAt(maze, nc * TILE + TILE / 2, nr * TILE + TILE / 2, mode)) {
+      if (
+        !ghostIsWallAt(maze, nc * TILE + TILE / 2, nr * TILE + TILE / 2, mode)
+      ) {
         const k = key(nc, nr);
         if (!visited.has(k)) {
           visited.add(k);
@@ -350,6 +364,7 @@ export function updateGhost(
   dt: number,
   maze: MazeState,
   isChasing: boolean,
+  heroPelletPos: { x: number; y: number } | null = null,
 ): GhostState {
   let { x, y, dir, mode, frightenedTimer, penTimer } = ghost;
 
@@ -399,6 +414,15 @@ export function updateGhost(
       targetX = PEN_ENTRANCE_X;
       targetY = PEN_ENTRANCE_Y;
       break;
+  }
+
+  // ── Hero pellet attraction ──────────────────────────────────────────────────
+  // When a hero pellet is on the board, ghosts in scatter/chase mode abandon
+  // their normal targets and converge on the hero pellet to "protect" it from
+  // Pac-Man.  Frightened and eaten ghosts keep their current behaviour.
+  if (heroPelletPos !== null && (mode === "chase" || mode === "scatter")) {
+    targetX = heroPelletPos.x;
+    targetY = heroPelletPos.y;
   }
 
   // ── Movement with crossing-based direction updates ──────────────────────────

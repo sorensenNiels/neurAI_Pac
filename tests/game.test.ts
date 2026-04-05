@@ -4,7 +4,7 @@ import {
   PACMAN_RADIUS,
   updatePlayer,
 } from "../src/entities/player";
-import { wrapTunnels } from "../src/game";
+import { rollHeroPower, wrapTunnels } from "../src/game";
 
 const CANVAS_WIDTH = 560;
 const CANVAS_HEIGHT = 620;
@@ -74,5 +74,25 @@ describe("updatePlayer — tunnel x-bounds override", () => {
       xMax: CANVAS_WIDTH + 20,
     });
     expect(next.x).toBeGreaterThan(CANVAS_WIDTH - 2);
+  });
+});
+
+describe("rollHeroPower", () => {
+  it("returns either 'extraLife' or 'levelSkip'", () => {
+    for (let i = 0; i < 50; i++) {
+      const power = rollHeroPower();
+      expect(["extraLife", "levelSkip"]).toContain(power);
+    }
+  });
+
+  it("returns 'extraLife' roughly 10 % of the time over many rolls", () => {
+    const N = 10_000;
+    let extra = 0;
+    for (let i = 0; i < N; i++) {
+      if (rollHeroPower() === "extraLife") extra++;
+    }
+    // Allow wide tolerance (5 %–20 %) to avoid flaky tests
+    expect(extra / N).toBeGreaterThan(0.05);
+    expect(extra / N).toBeLessThan(0.2);
   });
 });

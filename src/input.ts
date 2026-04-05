@@ -12,6 +12,11 @@ const KEY_MAP: Record<string, Direction> = {
  * - When a key is pressed, it becomes the active direction.
  * - When that key is released, the direction falls back to any other
  *   key still held, or null if nothing is held.
+ *
+ * Also buffers single-use events for UI screens:
+ * - confirmPending  — Enter or Space was pressed (consume with consumeConfirm)
+ * - typedChar       — last A-Z key pressed (consume with consumeTypedChar)
+ * - backspacePending — Backspace was pressed (consume with consumeBackspace)
  */
 export class Input {
   private _direction: Direction | null = null;
@@ -19,6 +24,10 @@ export class Input {
   // Tracks all currently held direction keys so we can fall back
   // to one if the active key is released while another is still held.
   private readonly held: Direction[] = [];
+
+  private _confirmPending = false;
+  private _typedChar: string | null = null;
+  private _backspacePending = false;
 
   constructor() {
     window.addEventListener("keydown", this.onKeyDown);
@@ -29,12 +38,54 @@ export class Input {
     return this._direction;
   }
 
+  /** Consumes and returns true if Enter or Space was pressed since the last call. */
+  consumeConfirm(): boolean {
+    const v = this._confirmPending;
+    this._confirmPending = false;
+    return v;
+  }
+
+  /** Consumes and returns the last A–Z key typed, or null if none since the last call. */
+  consumeTypedChar(): string | null {
+    const v = this._typedChar;
+    this._typedChar = null;
+    return v;
+  }
+
+  /** Consumes and returns true if Backspace was pressed since the last call. */
+  consumeBackspace(): boolean {
+    const v = this._backspacePending;
+    this._backspacePending = false;
+    return v;
+  }
+
   destroy(): void {
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("keyup", this.onKeyUp);
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
+    // UI: Enter / Space → confirm
+    if (e.key === "Enter" || e.key === " ") {
+      this._confirmPending = true;
+      e.preventDefault();
+      return;
+    }
+
+    // UI: Backspace
+    if (e.key === "Backspace") {
+      this._backspacePending = true;
+      e.preventDefault();
+      return;
+    }
+
+    // UI: letter keys for initials entry
+    if (/^[a-zA-Z]$/.test(e.key)) {
+      this._typedChar = e.key.toUpperCase();
+      // Fall through so the key is NOT treated as a direction
+      return;
+    }
+
     const dir = KEY_MAP[e.key];
     if (!dir) return;
 
