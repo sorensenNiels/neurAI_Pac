@@ -28,6 +28,9 @@ export class Input {
   private _confirmPending = false;
   private _typedChar: string | null = null;
   private _backspacePending = false;
+  private _highScorePending = false;
+  private _escapePending = false;
+  private _builderPending = false;
 
   constructor() {
     window.addEventListener("keydown", this.onKeyDown);
@@ -59,12 +62,40 @@ export class Input {
     return v;
   }
 
+  /** Consumes and returns true if H was pressed since the last call. */
+  consumeHighScore(): boolean {
+    const v = this._highScorePending;
+    this._highScorePending = false;
+    return v;
+  }
+
+  /** Consumes and returns true if Escape was pressed since the last call. */
+  consumeEscape(): boolean {
+    const v = this._escapePending;
+    this._escapePending = false;
+    return v;
+  }
+
+  /** Consumes and returns true if B was pressed since the last call. */
+  consumeBuilder(): boolean {
+    const v = this._builderPending;
+    this._builderPending = false;
+    return v;
+  }
+
   destroy(): void {
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("keyup", this.onKeyUp);
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
+    // UI: Escape → back
+    if (e.key === "Escape") {
+      this._escapePending = true;
+      e.preventDefault();
+      return;
+    }
+
     // UI: Enter / Space → confirm
     if (e.key === "Enter" || e.key === " ") {
       this._confirmPending = true;
@@ -82,6 +113,12 @@ export class Input {
     // UI: letter keys for initials entry
     if (/^[a-zA-Z]$/.test(e.key)) {
       this._typedChar = e.key.toUpperCase();
+      if (e.key === "h" || e.key === "H") {
+        this._highScorePending = true;
+      }
+      if (e.key === "b" || e.key === "B") {
+        this._builderPending = true;
+      }
       // Fall through so the key is NOT treated as a direction
       return;
     }

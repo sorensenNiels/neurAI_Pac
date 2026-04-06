@@ -31,8 +31,24 @@ import {
 } from "./maze/dots";
 import type { MazeState } from "./maze/maze";
 import { createDotsFromMaze, createMaze, isWallAt } from "./maze/maze";
-import { LEVEL_1 } from "./maze/mazeLayouts";
+import type { MazeLayout } from "./maze/mazeLayouts";
+import { MAZE_LAYOUTS } from "./maze/mazeLayouts";
 import { TILE } from "./maze/tiles";
+import introScreenUrl from "../assets/images/intro_screen.png";
+import {
+  applyTool,
+  clearMaze,
+  createBuilder,
+  cycleGhostIndex,
+  exportToLayout,
+  loadFromStorage,
+  saveToStorage,
+  setTool,
+  tickBuilder,
+  BUILDER_TOOLBAR_HEIGHT,
+  type BuilderState,
+} from "./builder/mazeBuilder";
+import { drawBuilder, hitTestBuilder } from "./rendering/builderRenderer";
 import {
   clearCanvas,
   drawAttractScreen,
@@ -41,6 +57,7 @@ import {
   drawFruit,
   drawGameOver,
   drawGhost,
+  drawIntroScreen,
   drawLevel,
   drawLevelComplete,
   drawLives,
@@ -52,6 +69,9 @@ import {
 
 /** Collision threshold for ghost–player contact (px). */
 const COLLISION_DIST = PACMAN_RADIUS + GHOST_RADIUS - 4; // 16 px
+
+/** How long each attract-mode slide is shown before auto-cycling (seconds). */
+const ATTRACT_CYCLE_DURATION = 6;
 
 /** Scatter/chase cycle durations (seconds). */
 const SCATTER_DURATION = 5;
@@ -157,7 +177,14 @@ export class Game {
 
   // ── Screen state ────────────────────────────────────────────────────────────
   /** Which top-level screen is currently shown. */
-  private screen: "attract" | "playing" | "enterInitials" = "attract";
+  private screen:
+    | "intro"
+    | "attract"
+    | "playing"
+    | "enterInitials"
+    | "builder" = "intro";
+  /** Preloaded intro/welcome image. */
+  private introImage: HTMLImageElement;
   /** Shared blink timer for prompt animations (wraps every second). */
   private blinkTimer = 0;
   private blinkOn = true;
@@ -167,6 +194,15 @@ export class Game {
   private initialsChars: string[] = ["A", "A", "A"];
   /** Index of the cursor position in the initials entry (0–2). */
   private initialsPos = 0;
+  /** Countdown (seconds) until auto-switching between intro image and scores. */
+  private attractCycleTimer = ATTRACT_CYCLE_DURATION;
+
+  // ── Builder state ──────────────────────────────────────────────────────────
+  private builder: BuilderState | null = null;
+  /** True while the left mouse button is held inside the grid. */
+  private builderPainting = false;
+  /** Mouse button that started the current paint stroke (0=left, 2=right). */
+  private builderPaintButton = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
@@ -179,22 +215,32 @@ export class Game {
     this.input = new Input();
 
     // Initialise to valid defaults — real values set by initGame() before play.
-    this.maze = createMaze(LEVEL_1);
-    const startX = LEVEL_1.playerStart.col * TILE + TILE / 2;
-    const startY = LEVEL_1.playerStart.row * TILE + TILE / 2;
+    this.maze = createMaze(this.layoutForLevel(1));
+    const startX = this.layoutForLevel(1).playerStart.col * TILE + TILE / 2;
+    const startY = this.layoutForLevel(1).playerStart.row * TILE + TILE / 2;
     this.player = createPlayer(startX, startY);
     this.ghosts = this.createGhosts();
     this.dots = createDotsFromMaze(this.maze);
     this.initialDotCount = this.dots.length;
 
     this.highScores = loadHighScores();
+
+    this.introImage = new Image();
+    this.introImage.src = introScreenUrl;
+
+    // Register permanent canvas mouse handlers (only act when screen === 'builder')
+    this.canvas.addEventListener("mousedown", this.onBuilderMouseDown);
+    this.canvas.addEventListener("mousemove", this.onBuilderMouseMove);
+    this.canvas.addEventListener("mouseup", this.onBuilderMouseUp);
+    this.canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   }
 
-  /** Resets all gameplay state for a fresh game (called before each new play). */
-  private initGame(): void {
-    this.maze = createMaze(LEVEL_1);
-    const startX = LEVEL_1.playerStart.col * TILE + TILE / 2;
-    const startY = LEVEL_1.playerStart.row * TILE + TILE / 2;
+  /** Resets all gameplay state for a fresh game. Accepts an optional custom layout for testing. */
+  private initGame(customLayout?: MazeLayout): void {
+    const layout = customLayout ?? this.layoutForLevel(1);
+    this.maze = createMaze(layout);
+    const startX = layout.playerStart.col * TILE + TILE / 2;
+    const startY = layout.playerStart.row * TILE + TILE / 2;
     this.player = createPlayer(startX, startY);
     this.ghosts = this.createGhosts();
     this.dots = createDotsFromMaze(this.maze);
@@ -217,7 +263,9 @@ export class Game {
 
   /** Creates all three ghosts with staggered pen timers. */
   private createGhosts(): GhostState[] {
-    const [blinkyStart, pinkyStart, clydeStart] = LEVEL_1.ghostStarts;
+    const [blinkyStart, pinkyStart, clydeStart] = this.layoutForLevel(
+      this.level,
+    ).ghostStarts;
     return [
       createGhost(
         blinkyStart.col * TILE + TILE / 2,
@@ -249,6 +297,14 @@ export class Game {
     this.input.destroy();
   }
 
+  /** Returns the maze layout for the given 1-based level, wrapping around the pool. */
+  private layoutForLevel(level: number) {
+    const idx = (level - 1) % MAZE_LAYOUTS.length;
+    const layout = MAZE_LAYOUTS[idx];
+    if (!layout) throw new Error(`No layout for level ${level}`);
+    return layout;
+  }
+
   private loop(timestamp: number): void {
     const dt = Math.min((timestamp - this.lastTime) / 1000, 0.1);
     this.lastTime = timestamp;
@@ -260,6 +316,15 @@ export class Game {
       this.blinkOn = !this.blinkOn;
     }
 
+    // Auto-cycle between intro image and high-scores while in attract mode
+    if (this.screen === "intro" || this.screen === "attract") {
+      this.attractCycleTimer -= dt;
+      if (this.attractCycleTimer <= 0) {
+        this.screen = this.screen === "intro" ? "attract" : "intro";
+        this.attractCycleTimer = ATTRACT_CYCLE_DURATION;
+      }
+    }
+
     this.update(dt);
     this.render();
 
@@ -267,8 +332,16 @@ export class Game {
   }
 
   private update(dt: number): void {
+    if (this.screen === "intro") {
+      this.updateIntro();
+      return;
+    }
     if (this.screen === "attract") {
       this.updateAttract();
+      return;
+    }
+    if (this.screen === "builder") {
+      this.updateBuilder(dt);
       return;
     }
     if (this.screen === "enterInitials") {
@@ -278,13 +351,189 @@ export class Game {
     this.updatePlaying(dt);
   }
 
-  /** Attract screen: wait for the player to press Enter/Space to start. */
+  /** Intro screen: ENTER starts the game, H shows scores, B opens builder. */
+  private updateIntro(): void {
+    if (this.input.consumeConfirm()) {
+      this.initGame();
+      this.screen = "playing";
+    } else if (this.input.consumeHighScore()) {
+      // Immediately jump to the scores slide and reset the cycle timer
+      this.screen = "attract";
+      this.attractCycleTimer = ATTRACT_CYCLE_DURATION;
+    } else if (this.input.consumeBuilder()) {
+      this.enterBuilder();
+    }
+  }
+
+  /** Attract / high-scores screen: ENTER starts, B opens builder. */
   private updateAttract(): void {
     if (this.input.consumeConfirm()) {
       this.initGame();
       this.screen = "playing";
+    } else if (this.input.consumeBuilder()) {
+      this.enterBuilder();
     }
   }
+
+  // ── Builder helpers ──────────────────────────────────────────────────────────
+
+  private enterBuilder(): void {
+    const saved = loadFromStorage();
+    this.builder = saved ? createBuilder(saved) : createBuilder();
+    // Expand canvas height to fit the toolbar + grid
+    this.canvas.height = 620 + BUILDER_TOOLBAR_HEIGHT;
+    this.screen = "builder";
+  }
+
+  private exitBuilder(): void {
+    // Restore game canvas height
+    this.canvas.height = 620 + HUD_HEIGHT;
+    this.screen = "intro";
+    this.attractCycleTimer = ATTRACT_CYCLE_DURATION;
+  }
+
+  private testCustomMaze(): void {
+    if (!this.builder) return;
+    const layout = exportToLayout(this.builder);
+    this.canvas.height = 620 + HUD_HEIGHT;
+    this.initGame(layout);
+    this.screen = "playing";
+  }
+
+  private loadBuilderMaze(): void {
+    const saved = loadFromStorage();
+    if (saved) {
+      this.builder = createBuilder(saved);
+    } else if (this.builder) {
+      this.builder = {
+        ...this.builder,
+        statusMessage: "No saved maze.",
+        statusTimer: 2,
+      };
+    }
+  }
+
+  private updateBuilder(dt: number): void {
+    if (!this.builder) return;
+    this.builder = tickBuilder(this.builder, dt);
+
+    if (this.input.consumeEscape()) {
+      this.exitBuilder();
+      return;
+    }
+
+    if (this.input.consumeConfirm()) {
+      this.testCustomMaze();
+      return;
+    }
+
+    const ch = this.input.consumeTypedChar();
+    if (ch !== null) {
+      switch (ch) {
+        case "W":
+          this.builder = setTool(this.builder, "wall");
+          break;
+        case "F":
+          this.builder = setTool(this.builder, "floor");
+          break;
+        case "D":
+          this.builder = setTool(this.builder, "dot");
+          break;
+        case "O":
+          this.builder = setTool(this.builder, "pellet");
+          break;
+        case "X":
+          this.builder = setTool(this.builder, "door");
+          break;
+        case "P":
+          this.builder = setTool(this.builder, "playerStart");
+          break;
+        case "G":
+          if (this.builder.activeTool === "ghost") {
+            this.builder = cycleGhostIndex(this.builder);
+          } else {
+            this.builder = setTool(this.builder, "ghost");
+          }
+          break;
+        case "T":
+          this.builder = setTool(this.builder, "tunnelRow");
+          break;
+        case "S":
+          this.builder = saveToStorage(this.builder);
+          break;
+        case "L":
+          this.loadBuilderMaze();
+          break;
+        case "C":
+          this.builder = clearMaze(this.builder);
+          break;
+      }
+    }
+  }
+
+  // Mouse handlers — permanently registered; only act in builder mode.
+  private onBuilderMouseDown = (e: MouseEvent): void => {
+    if (this.screen !== "builder" || !this.builder) return;
+    this.builderPainting = true;
+    this.builderPaintButton = e.button;
+    this.applyBuilderMouse(e);
+  };
+
+  private onBuilderMouseMove = (e: MouseEvent): void => {
+    if (this.screen !== "builder" || !this.builder || !this.builderPainting)
+      return;
+    this.applyBuilderMouse(e);
+  };
+
+  private onBuilderMouseUp = (): void => {
+    this.builderPainting = false;
+  };
+
+  private applyBuilderMouse(e: MouseEvent): void {
+    if (!this.builder) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const scaleX = this.canvas.width / rect.width;
+    const scaleY = this.canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+
+    const hit = hitTestBuilder(x, y);
+    if (!hit) return;
+
+    if (hit.kind === "tool") {
+      // Tool-button clicks cycle ghost index if already on ghost tool
+      if (hit.tool === "ghost" && this.builder.activeTool === "ghost") {
+        this.builder = cycleGhostIndex(this.builder);
+      } else {
+        this.builder = setTool(this.builder, hit.tool);
+      }
+    } else if (hit.kind === "action") {
+      switch (hit.action) {
+        case "play":
+          this.testCustomMaze();
+          break;
+        case "save":
+          this.builder = saveToStorage(this.builder);
+          break;
+        case "load":
+          this.loadBuilderMaze();
+          break;
+        case "clear":
+          this.builder = clearMaze(this.builder);
+          break;
+        case "back":
+          this.exitBuilder();
+          break;
+      }
+    } else if (hit.kind === "tile") {
+      // Right-click always erases (floor), left-click uses active tool
+      const override =
+        this.builderPaintButton === 2 ? ("floor" as const) : undefined;
+      this.builder = applyTool(this.builder, hit.col, hit.row, override);
+    }
+  }
+
+  // ── Playing update (existing) ────────────────────────────────────────────────
 
   /** Initials-entry screen: type letters, Backspace, then Enter to submit. */
   private updateEnterInitials(): void {
@@ -306,7 +555,8 @@ export class Game {
         level: this.level,
       });
       this.highScores = loadHighScores();
-      this.screen = "attract";
+      this.screen = "attract"; // show the scores so player sees their rank
+      this.attractCycleTimer = ATTRACT_CYCLE_DURATION;
     }
   }
 
@@ -321,7 +571,8 @@ export class Game {
           this.initialsPos = 0;
           this.screen = "enterInitials";
         } else {
-          this.screen = "attract";
+          this.screen = "intro";
+          this.attractCycleTimer = ATTRACT_CYCLE_DURATION;
         }
       }
       return;
@@ -333,6 +584,7 @@ export class Game {
       if (this.levelCompleteTimer === 0) {
         this.levelComplete = false;
         this.level++;
+        this.maze = createMaze(this.layoutForLevel(this.level));
         this.dots = createDotsFromMaze(this.maze);
         this.initialDotCount = this.dots.length;
         this.fruit = null;
@@ -477,8 +729,10 @@ export class Game {
           ? Math.floor(this.initialDotCount / 3)
           : Math.floor((2 * this.initialDotCount) / 3);
       if (dotsEaten >= threshold) {
-        const spawnX = LEVEL_1.playerStart.col * TILE + TILE / 2;
-        const spawnY = LEVEL_1.playerStart.row * TILE + TILE / 2;
+        const spawnX =
+          this.layoutForLevel(this.level).playerStart.col * TILE + TILE / 2;
+        const spawnY =
+          this.layoutForLevel(this.level).playerStart.row * TILE + TILE / 2;
         this.fruit = {
           x: spawnX,
           y: spawnY,
@@ -584,8 +838,9 @@ export class Game {
   }
 
   private resetPositions(): void {
-    const startX = LEVEL_1.playerStart.col * TILE + TILE / 2;
-    const startY = LEVEL_1.playerStart.row * TILE + TILE / 2;
+    const layout = this.layoutForLevel(this.level);
+    const startX = layout.playerStart.col * TILE + TILE / 2;
+    const startY = layout.playerStart.row * TILE + TILE / 2;
 
     this.player = createPlayer(startX, startY);
     this.ghosts = this.createGhosts();
@@ -618,6 +873,18 @@ export class Game {
   }
 
   private render(): void {
+    if (this.screen === "intro") {
+      clearCanvas(this.ctx, this.canvas.width, this.canvas.height);
+      drawIntroScreen(
+        this.ctx,
+        this.introImage,
+        this.canvas.width,
+        this.canvas.height,
+        this.blinkOn,
+      );
+      return;
+    }
+
     if (this.screen === "attract") {
       clearCanvas(this.ctx, this.canvas.width, this.canvas.height);
       drawAttractScreen(
@@ -627,6 +894,11 @@ export class Game {
         this.canvas.height,
         this.blinkOn,
       );
+      return;
+    }
+
+    if (this.screen === "builder" && this.builder) {
+      drawBuilder(this.ctx, this.builder, this.canvas.width);
       return;
     }
 

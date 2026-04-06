@@ -486,10 +486,14 @@ export function drawAttractScreen(
   // Blinking prompt
   if (blinkOn) {
     ctx.fillStyle = "#fff";
-    ctx.font = "bold 16px monospace";
+    ctx.font = "bold 14px monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
-    ctx.fillText("PRESS ENTER TO START", width / 2, height - 28);
+    ctx.fillText(
+      "ENTER \u2014 START    B \u2014 BUILDER",
+      width / 2,
+      height - 28,
+    );
   }
 }
 
@@ -570,4 +574,48 @@ export function drawEnterInitials(
   ctx.textBaseline = "alphabetic";
   ctx.fillText("TYPE LETTERS  •  BACKSPACE to fix", width / 2, 316);
   ctx.fillText("ENTER to confirm", width / 2, 336);
+}
+
+/**
+ * Draws the intro / welcome screen centred on the canvas.
+ * The image fills the canvas, then two prompts are overlaid at the bottom.
+ */
+export function drawIntroScreen(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  width: number,
+  height: number,
+  blinkOn: boolean,
+): void {
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, width, height);
+
+  if (image.complete && image.naturalWidth > 0) {
+    // Scale the image to fit the canvas while preserving aspect ratio
+    const scale = Math.min(
+      width / image.naturalWidth,
+      height / image.naturalHeight,
+    );
+    const drawW = image.naturalWidth * scale;
+    const drawH = image.naturalHeight * scale;
+    const drawX = (width - drawW) / 2;
+    const drawY = (height - drawH) / 2;
+    ctx.drawImage(image, drawX, drawY, drawW, drawH);
+  }
+
+  // Semi-transparent footer bar so prompts remain readable over any image
+  ctx.fillStyle = "rgba(0,0,0,0.6)";
+  ctx.fillRect(0, height - 56, width, 56);
+
+  if (blinkOn) {
+    ctx.fillStyle = "#FFD700";
+    ctx.font = "bold 14px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText(
+      "ENTER \u2014 START    H \u2014 SCORES    B \u2014 BUILDER",
+      width / 2,
+      height - 20,
+    );
+  }
 }
