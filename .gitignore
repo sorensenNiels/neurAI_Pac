@@ -1,0 +1,33 @@
+node_modules/
+dist/
+core
+
+# pnpm
+.pnpm-store/
+pnpm-debug.log*
+
+# Vite cache
+.vite/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Test coverage output
+coverage/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor directories
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
